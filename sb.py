@@ -153,3 +153,9 @@ def shell(command):
 #Startpunkt
 clear()
 check()
+
+"""
+sb.py wurde vollkommen überarbeitet
+-> weniger Funktionalität (erst mal: noch kein Installieren/Ausführen)
+-> ich war aber bemüht Konventionen einzuhalten: Kontext-Manager statt open/close; Behandlung von Ausnahmen via try/except Blöcken inkl. Errorlogging usw.
+"""
