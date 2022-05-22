@@ -6,7 +6,8 @@ import math
 import inspect
 import time
 
-hpl_cfg_path = "config/hpl/"
+hpl_cfg_path = 'config/hpl/'
+aktuell_menu = 'main'
 
 #In welcher Funktion ist wann, welche Exception o.a. Unregelmäßigkeit aufgetreten?
 def error_log(txt):
@@ -34,33 +35,70 @@ def input_format():
     print('Eingabe: ', end='')
     return input()
 
-def menu(txt):
-    print('---Menü---')
-    print('(0) Exit')
-    print('(1) Optionen')
-    print('(2) HPL')
-    print('(3) OSU')
-    print('(4) Lesetest')
-    print('(5) Schreibtest')
-    print(' ')
+def menu(txt=0, back=0):
+    #Umleitung in aktuelles Menu
+    if back !=0:
+        clear()
+        opt = back
+        
+    else:
+        aktuell_menu = 'main'
+        print('---Menü---')
+        print('(0) Exit')
+        print('(1) Optionen')
+        print('(2) HPL')
+        print('(3) OSU')
+        print('(4) Lesetest')
+        print('(5) Schreibtest')
+        print(' ')
     
     #Nachrichten an den Nutzer aus vorh. Vorgängen: Exceptions, stdout von Subshell-Aufrufen...
-    print(str(txt))
+    if txt != 0:
+        print(str(txt))
     
     #Nutzereingabe
-    opt = str(input_format())
-    if opt == '0':
+    if back == 0:
+        opt = str(input_format())
+    if opt == '0' or opt == 'exit':
         clear()
         SystemExit(0)
-    elif opt == '1':
+    elif opt == '1' or opt == 'options':
+        clear()       
+        menu('Info: Noch nicht implementiert...')
+    elif opt == '2' or opt == 'hpl':
         clear()
         menu('Info: Noch nicht implementiert...')
-    elif opt == '2':
+    
+    elif opt == '3'or opt == 'osu':
         clear()
-        menu('Info: Noch nicht implementiert...')
-    elif opt == '3':
-        clear()
-        menu('Info: Noch nicht implementiert...')
+        aktuell_menu='mvapich2'
+        print('---OSU---')
+        print('(0) Back')
+        print('(1) Run')
+        print('(2) View install specs')
+        print('(3) Install')
+        print(' ')        
+        
+        if back != 0:
+            print(str(txt))  
+
+        opt = str(input_format())    
+        
+        if opt == '0' or opt == 'back':
+            clear()
+            back = 0
+            menu()
+        elif opt == '1' or opt == 'run':
+            clear()
+            menu('Info: Noch nicht implementiert...','3')
+        elif opt == '2' or opt == 'specs':
+            clear()            
+            menu(shell('spack find --show-full-compiler mvapich2'),'3')
+        elif opt == '3' or opt == 'install':     
+            print("Name@Version %compiler@Version\n(Name und Version optional)\n")                        
+            info = install_spec(str(input_format()))
+            menu('Installation läuft: '+info,'3')   
+            
     #Testoption, später löschen
     elif opt == '4':
         clear()
@@ -80,14 +118,21 @@ def menu(txt):
         l2 = input_format()
         file_w(n2, t2, l2)
         time.sleep(0.5)
-        menu('Schreibversuch wurde unternommen...')
+        menu('Schreibversuch wurde unternommen...')   
+       
+    
     elif opt[0:6] == 'shell:':
         clear()
         menu('Ausgabe: \n'+str(shell(opt[6:])))
+    
+  
     else:
         clear()
         menu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')
-     
+    
+
+         
+         
 def clear():
     os.system('clear')
     #print('\n\n\n---Debugprint---\n\n\n')
@@ -121,6 +166,98 @@ def file_w(name, txt, pos):
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__))
         menu('Exception: {}'.format(type(exc).__name__))
+
+
+#Überprüft ob die angegebene Version existiert
+def check_version(name,version):
+    try: 
+        out = shell('spack info '+str(name))
+        if out.find(version) != -1:
+            return True
+        else: 
+            return False
+    except Exception as exc:     
+        error_log(' {} [Exception]'.format(type(exc).__name__))
+        menu('Exception: {}'.format(type(exc).__name__))
+        
+
+#Liefert empfohlene (aktuellste) Version     
+def find_last_version(name):
+    try:
+        version = ''       
+        out = shell('spack info '+str(name))         
+        lines=out.split('\n')        
+        for _ in lines:           
+            if "Preferred version:" in str(_):
+                index = lines.index(str(_))                
+                for i in lines[index+1]:
+                    if i.isdigit() or i is '.':
+                        version=version+i
+                    if i is 'h':
+                        return version  
+                        
+    except Exception as exc:     
+        error_log(' {} [Exception]'.format(type(exc).__name__))
+        menu('Exception: {}'.format(type(exc).__name__))
+        
+ 
+#Format des input: name@version %compiler@version 
+#Name und Versionen sind optional!
+def extract(str):
+    try:
+        out = ['','','','']
+        arr = str.split()  
+       
+        #Extrahiere Package Spezifikationen
+        if arr[0].find('@') == -1:
+            if aktuell_menu != 'main':
+                out[0] = aktuell_menu
+                out[1] = find_last_version(aktuell_menu)                    
+            else:
+                out[0] = arr[0]
+                print(arr[0])
+                out[1] = find_last_version(arr[0])               
+        else:
+            temp = arr[0].split('@')
+            out[1] = temp[1]
+            if aktuell_menu != 'main':
+                out[0] = aktuell_menu
+            else:                    
+                out[0] = temp[0]
+
+        #Extrahiere Compiler Spezifikationen 
+        #Behandlung des Sondefalls dass nur der Compilername angegeben wurde
+        if len(arr)==1:
+            arr=['',arr[0]]
+        arr = arr[1].split('%')        
+        if arr[1].find('@') == -1: 
+            out[2] = arr[1]
+            print(arr[0])
+            out[3] = find_last_version(arr[0])               
+        else:            
+            arr = arr[1].split('@')                
+            out[3] = arr[1]
+            out[2] = arr[0]
+            
+        return out
+        
+    except Exception as exc:     
+        error_log(' {} [Exception]'.format(type(exc).__name__))
+        menu('Exception: {}'.format(type(exc).__name__))
+                
+                
+def install_spec(str):
+    try:
+        #Par = [PackageName, PackageVersion, Compiler, Compilerversion]
+        para = extract(str)
+        
+        if check_version(para[0],para[1]) and check_version(para[2],para[3]):              
+            return 'Pid: ?'+str(para[0])+'@'+str(para[1])+' %'+str(para[2])+'@'+str(para[3])
+    
+    except Exception as exc:     
+        error_log(' {} [Exception]'.format(type(exc).__name__))
+        menu('Exception: {}'.format(type(exc).__name__))
+    
 
 #Diese Funktion klappt, kann aber nicht alles! z.B. 'echo $$' printet nicht die Shell-PID!
 """
