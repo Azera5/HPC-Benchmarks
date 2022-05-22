@@ -48,8 +48,6 @@ def menu(txt=0, back=0):
         print('(1) Optionen')
         print('(2) HPL')
         print('(3) OSU')
-        print('(4) Lesetest')
-        print('(5) Schreibtest')
         print(' ')
     
     #Nachrichten an den Nutzer aus vorh. Vorgängen: Exceptions, stdout von Subshell-Aufrufen...
@@ -98,40 +96,25 @@ def menu(txt=0, back=0):
             print("Name@Version %compiler@Version\n(Name und Version optional)\n")                        
             info = install_spec(str(input_format()))
             menu('Installation läuft: '+info,'3')   
-            
-    #Testoption, später löschen
-    elif opt == '4':
-        clear()
-        print('Dateiname?')
-        n1 = input_format()
-        print('Zeile?')
-        l1 = input_format()
-        menu('Leseversuch: '+file_r(n1, l1))
-    #Testoption, später löschen
-    elif opt == '5':
-        clear()
-        print('Dateiname?')
-        n2 = input_format()
-        print('Was schreiben?')
-        t2 = input_format()
-        print('Zeile?')
-        l2 = input_format()
-        file_w(n2, t2, l2)
-        time.sleep(0.5)
-        menu('Schreibversuch wurde unternommen...')   
        
-    
+    elif opt[0:5] == 'code:':
+        try:
+            clear()
+            r = eval(opt[5:])
+            menu('Rückgabe: '+str(r)+' [print] --- '+str(type(r))+' [typ]')
+        except Exception as exc:
+            error_log(' {} [Exception]'.format(type(exc).__name__))
+            menu('Exception: {}'.format(type(exc).__name__))
     elif opt[0:6] == 'shell:':
-        clear()
-        menu('Ausgabe: \n'+str(shell(opt[6:])))
-    
-  
+        try:
+            clear()
+            menu('Ausgabe: \n'+str(shell(opt[6:])))
+        except Exception as exc:
+            error_log(' {} [Exception]'.format(type(exc).__name__))
+            menu('Exception: {}'.format(type(exc).__name__))
     else:
         clear()
         menu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')
-    
-
-         
          
 def clear():
     os.system('clear')
