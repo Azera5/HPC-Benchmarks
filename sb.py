@@ -7,8 +7,7 @@ import inspect
 import time
 
 hpl_cfg_path = 'config/hpl/'
-
-
+spack_binary = '~/spack/bin/spack'
 
 #In welcher Funktion ist wann, welche Exception o.a. Unregelmäßigkeit aufgetreten?
 def error_log(txt):
@@ -29,6 +28,36 @@ def check():
         shell('touch '+hpl_cfg_path+'hpl_cfg_d.txt')
         str = str+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
     menu(str)
+
+#Hier soll HPL.dat dem Profil entsprechend justiert werden
+def set_data_hpl(id):
+    
+    #Zahlen für die üblichen & 'd' für default
+    cfg = hpl_cfg_path+'hpl_cfg_{}.txt'.format(id)
+    
+    #Um welches spec handelt es sich überhaupt... 
+    spec = file_r(cfg, 1)
+    #...und wo liegt das zugehörige HPL.dat?
+    path = shell(spack_binary+' find --paths '+spec)
+    #Einkürzung auf den Pfad an sich
+    _ = path.find("/home")
+    path = path[_:]
+    #Entfernt unnötige Leerzeichen am Ende
+    path = path.strip()
+    
+    #Anpassung der HPL.dat <--- Test, später Schleife
+    #Alle wichtigen Stellen aus der Config müssen übertragen werden
+    #Schreibfunktion schiebt scheinbar nur vor vorhandene Einträge? <--- Bug?
+    file_w(path+'/bin/HPL.dat','abc123',2)
+    
+#Hiermit soll das Skript gebaut werden    
+def build_hpl():
+    print('---')
+
+#Hiermit soll das Skript ausgeführt werden
+#Übergabe eines Skripts an SLURM <--- Vorschlag: vielleicht erst mal mit einem statischen Skript?
+def run_hpl():
+    print('---')
 
 #Ein Art Prompt für den Nutzer
 def input_format():
