@@ -214,7 +214,7 @@ def find_last_version(name):
         return 'Exception: {}'.format(type(exc).__name__)
         
  
-#Format des input: name@version %compiler@version 
+#Format des input: name@version%compiler@version 
 #Name und Versionen sind optional!
 def extract(input,menu):
     try:
