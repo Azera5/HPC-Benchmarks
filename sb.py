@@ -9,6 +9,7 @@ import time
 hpl_cfg_path = 'config/hpl/'
 
 
+
 #In welcher Funktion ist wann, welche Exception o.a. Unregelmäßigkeit aufgetreten?
 def error_log(txt):
     txt = str(inspect.stack()[1][3])+' [Funktion] '+str(datetime.datetime.now())+' [Zeitpunkt] '+txt+'\n'
@@ -42,7 +43,6 @@ def menu(txt=0, back=0):
         opt = back
         
     else:
-        aktuell_menu = 'main'
         print('---Menü---')
         print('(0) Exit')
         print('(1) Optionen')
@@ -51,13 +51,13 @@ def menu(txt=0, back=0):
         print(' ')
     
     #Nachrichten an den Nutzer aus vorh. Vorgängen: Exceptions, stdout von Subshell-Aufrufen...
-    if txt != 0:
+    if txt != 0 and back==0:
         print(str(txt))
     
     #Nutzereingabe
     if back == 0:
         opt = str(input_format())
-    if opt == '0' or opt == 'exit':
+    if opt == '0' or opt == 'q':
         clear()
         SystemExit(0)
     elif opt == '1' or opt == 'options':
@@ -95,9 +95,7 @@ def menu(txt=0, back=0):
         clear()
         menu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')    
 
-def osu_menu(back,txt):
-    aktuell_menu ='mvapich2'
-    print('Betritt aktuell_menu: '+aktuell_menu)
+def osu_menu(back,txt):    
     print('---OSU---')
     print('(0) Back')
     print('(1) Run')
@@ -110,7 +108,7 @@ def osu_menu(back,txt):
 
     opt = str(input_format())    
         
-    if opt == '0' or opt == 'back':
+    if opt == '0' or opt == 'q':
         clear()
         back = 0
         menu()
@@ -119,13 +117,15 @@ def osu_menu(back,txt):
         menu('Info: Noch nicht implementiert...','3')
     elif opt == '2' or opt == 'specs':
         clear()            
-        menu(shell('spack find --show-full-compiler mvapich2'),'3')
+        menu(view_install_specs('mvapich2'),'3')
     elif opt == '3' or opt == 'install':
-        print('Install aktuell_menu: '+aktuell_menu)
-        print("Name@Version %compiler@Version\n(Name und Version optional)\n")                        
-        info = install_spec(str(input_format()))
-        print(info)
-        menu('Installation läuft: '+info,'3')
+        clear()
+        print("Name und Version optional\npackage@version%compiler@version\n") 
+        print(' ')  
+        menu(install_spec(str(input_format()),'mvapich2'),'3')        
+    else:
+        clear()
+        menu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1','3')
 
          
          
@@ -164,14 +164,27 @@ def file_w(name, txt, pos):
         menu('Exception: {}'.format(type(exc).__name__))
 
 
+def view_install_specs(name=0):
+    try:
+        if name==0:
+           return shell('spack find --show-full-compiler')
+        else:
+            return shell('spack find --show-full-compiler '+name)  
+    
+    except Exception as exc:     
+        error_log(' {} [Exception]'.format(type(exc).__name__))
+        menu('Exception: {}'.format(type(exc).__name__))
+
 #Überprüft ob die angegebene Version existiert
 def check_version(name,version):
-    try: 
+    try:
+        if name == 'error':
+            return 'error'    
         out = shell('spack info '+str(name))
         if out.find(version) != -1:
-            return True
+            return name
         else: 
-            return False
+            return 'error'
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__))
         menu('Exception: {}'.format(type(exc).__name__))
@@ -180,6 +193,8 @@ def check_version(name,version):
 #Liefert empfohlene (aktuellste) Version     
 def find_last_version(name):
     try:
+        if name == 'error':
+            return 'error'
         version = ''       
         out = shell('spack info '+str(name))         
         lines=out.split('\n')        
@@ -190,8 +205,10 @@ def find_last_version(name):
                     if i.isdigit() or i is '.':
                         version=version+i
                     if i is 'h':
-                        return version  
-                        
+                        return version
+        if version == '':
+            return'error'
+        
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__))
         return 'Exception: {}'.format(type(exc).__name__)
@@ -199,48 +216,51 @@ def find_last_version(name):
  
 #Format des input: name@version %compiler@version 
 #Name und Versionen sind optional!
-def extract(str):
+def extract(input,menu):
     try:
-        #print('Extract aktuell_menu: '+aktuell_menu)
+        #Vorbreitung des Eingabe
         out = ['','','','']
-        arr = str.split()
-        
-        #Behandlung des Sondefalls dass nur der Compilername angegeben wurde
-        if len(arr)==1:
-            arr=['',arr[0]]        
-       
-        #Extrahiere Package Spezifikationen
-        if arr[0].find('@') == -1:
-            #print(aktuell_menu)
-            if aktuell_menu != 'main':
-                #print('1. PackageName: '+aktuell_menu)
-                out[0] = aktuell_menu                
-                out[1] = find_last_version(aktuell_menu)
-                #print('PackageVersion: '+out[1])
-            else:
-                #print('2. PackageName: '+arr[0])
-                out[0] = arr[0]                
-                out[1] = find_last_version(arr[0]) 
-                #print('PackageVersion: '+out[1])
+        input.replace(' ','')
+        if input.find('%')==-1:
+            return 'error'
+        elif input[0]=='%':
+            arr=[input]
         else:
-            temp = arr[0].split('@')
-            out[1] = temp[1]
-            if aktuell_menu != 'main':
-                out[0] = aktuell_menu
-            else:                    
-                out[0] = temp[0]
+            arr = input.split('%')
+            arr[1] = '%'+arr[1]
+        
+        #Sondefall: Nur Compilername gegeben
+        if arr[0][:1]=='@' or arr[0][:1]=='%':            
+            if(menu=='main'):                
+                print('Kein Packagename\nNeue Eingabe oder Abbruch(q)\n')
+                out[0]=str(input_format())            
+            else:
+                out[0]=menu            
+            
+            if arr[0][:1]!='@':
+                out[1]=find_last_version(out[0])
+                arr=['',arr[0]]
+            else:                
+                out[1]=check_version(out[0],arr[0][1:arr.find('%')-1])           
+            
+        #Extrahiere Package Spezifikationen          
+        elif arr[0].find('%') == -1:
+            if arr[0].find('@') == -1:
+                out[0] = arr[0]
+                out[1]=find_last_version(arr[0])
+            else:
+                temp=arr[0].split('@')
+                out[0] = temp[0]            
+                out[1] = check_version(out[0],temp[1]) 
 
-        #Extrahiere Compiler Spezifikationen        
-        arr = arr[1].split('%')        
-        if arr[1].find('@') == -1: 
-            #print('Compilername: '+arr[0])
-            out[2] = arr[1]            
-            out[3] = find_last_version(arr[0])
-            #print('Compilerversion: '+out[3])
+        #Extrahiere Compiler Spezifikationen 
+        if arr[1].find('@') == -1:             
+            out[2] = arr[1][1:]            
+            out[3] = find_last_version(arr[1][1:])            
         else:            
-            arr = arr[1].split('@')                
-            out[3] = arr[1]
-            out[2] = arr[0]
+            arr = arr[1].split('@')          
+            out[2] = arr[1][1:]
+            out[3] = check_version(out[2],arr[1])
             
         return out
         
@@ -249,14 +269,24 @@ def extract(str):
         menu('Exception: {}'.format(type(exc).__name__))
                 
                 
-def install_spec(str):
+def install_spec(input,menu):
     try:
-        #print('InstallFunk aktuell_menu: '+aktuell_menu)
         #Par = [PackageName, PackageVersion, Compiler, Compilerversion]
-        para = extract(str)
-        print(str+' -> '+para)
-        #if check_version(para[0],para[1]) and check_version(para[2],para[3]):
-        return 'Pid: ?'+str(para[0])+'@'+str(para[1])+' %'+str(para[2])+'@'+str(para[3])
+        para = extract(input,menu)        
+        
+        #Abfangen nicht existierender Packages, Compiler oder Versionen
+        if str(para).find('error')!=-1:
+            return 'Abbruch: Falsche Eingabe!'
+        else:
+            #install command
+            spec=str(para[0])+'@'+str(para[1])+' %'+str(para[2])+'@'+str(para[3])
+            #Check ob spec bereits installiert ist
+            if view_install_specs().find(spec) != -1:
+                return 'Job ID: [comming soon] ' + spec
+            #TODO Slurmscript schreiben, evtl in eigene Funktion auslagern?
+            else:
+                return spec +' ist bereits installiert'
+            
     
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__))
