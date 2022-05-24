@@ -6,7 +6,7 @@ import math
 import inspect
 import time
 
-hpl_cfg_path = 'config/hpl/'
+hpl_cfg_pth = 'config/hpl/'
 spack_binary = '~/spack/bin/spack'
 
 #In welcher Funktion ist wann, welche Exception o.a. Unregelmäßigkeit aufgetreten?
@@ -20,44 +20,117 @@ def check():
     if (os.path.isfile('log.txt'))==False:     
         shell('touch log.txt')
         str = str+'errorlog erstellt ...\n'
-    if (os.path.isdir(hpl_cfg_path))==False:     
-        shell('mkdir -p '+hpl_cfg_path)
+    if (os.path.isdir(hpl_cfg_pth))==False:     
+        shell('mkdir -p '+hpl_cfg_pth)
         str = str+'Config-Verzeichnis für HPL erstellt ...\n'
         #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
-    if (os.path.isfile(hpl_cfg_path+'hpl_cfg_d.txt'))==False:     
-        shell('touch '+hpl_cfg_path+'hpl_cfg_d.txt')
+    if (os.path.isfile(hpl_cfg_pth+'hpl_cfg_d.txt'))==False:     
+        shell('touch '+hpl_cfg_pth+'hpl_cfg_d.txt')
         str = str+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
     menu(str)
+    #Wäre gut wenn man sehen könnte ob lokale spack Installation da ist oder nicht, vll auch mit Pfadangabe...
+
+def config_cut(line):
+    line = line[:line.find("[")]
+    return line.strip()
+
+#Passende Index-Grenzen für die Config setzen <--- TODO
+def get_hpl_spec(pth):
+    symb = ['@', '%', '@', '^', '@', '%', '@', '^', '@', '%', '@']
+    spec = 'hpl'
+    #Cofig-Zeile ab 1 aber Symbol-Liste ab 0, desw. der Index-Offeset
+    for _ in range(0,11):
+        symb[_] = symb[_]+config_cut(file_r(pth,(_+1)))
+        #Nur anhängen, wenn auch was in der Config stand
+        #Vorsicht: Es müsste noch geprüft werden ob vor einem @blabla überhaupt etwas steht!
+        if len(symb[_])>2:
+            spec = spec+symb[_]
+    print('DBG --- get_hpl_spec(pth) ermittelt:'+spec)
+    return spec
 
 #Hier soll HPL.dat dem Profil entsprechend justiert werden
-def set_data_hpl(id):
-    
-    #Zahlen für die üblichen & 'd' für default
-    cfg = hpl_cfg_path+'hpl_cfg_{}.txt'.format(id)
-    
-    #Um welches spec handelt es sich überhaupt... 
-    spec = file_r(cfg, 1)
-    #...und wo liegt das zugehörige HPL.dat?
-    path = shell(spack_binary+' find --paths '+spec)
-    #Einkürzung auf den Pfad an sich
-    _ = path.find("/home")
-    path = path[_:]
-    #Entfernt unnötige Leerzeichen am Ende
-    path = path.strip()
-    
-    #Anpassung der HPL.dat <--- Test, später Schleife
-    #Alle wichtigen Stellen aus der Config müssen übertragen werden
-    #Schreibfunktion schiebt scheinbar nur vor vorhandene Einträge? <--- Bug?
-    file_w(path+'/bin/HPL.dat','abc123',2)
-    
+def set_data_hpl(cfg, pth):
+    print('DBG: set_data_hpl hat die File gefunden -> '+str(os.path.isfile(pth+'/HPL.dat')))
+    #Überschreiben mit Offeset (erst ab Index 13 geht der HPL Abschnitt in der Config los)
+    #Auskommentiert bis Schreibfunktion gefixt ist <--- TODO
+    """
+    if (os.path.isfile(pth+'/HPL.dat'))==True:
+        for _ in range(2,30):
+            file_w(pth+'/HPL.dat',file_r(cfg,_+11),_)
+    """
+
 #Hiermit soll das Skript gebaut werden    
-def build_hpl():
-    print('---')
+def build_hpl(cfg, pth, spec):
+    print('DBG --- build_hpl würde hier bauen')
+    
+
+
+#lieber mit spack load
+"""
+srun -p vl - parcio -- pty bash
+source spack/share/spack/setup-env.sh
+module avail
+module load hpl-2.3-gcc-8.5.0-m4rmdjk
+module load openmpi-4.1.3-gcc-8.5.0-dm5ykbl
+module load openblas-0.3.20-gcc-8.5.0-lnllhmy
+module list
+cd spack/opt/spack/linux-centos8-x86_64_v3/gcc-8.5.0/hpl-2.3-m4rmdjkqu7zmzc2b5kmjq6xhtdx7mdvr/bin
+mpirun -np 2 xhpl
+"""
+
+#def create_script(par,hw_alloc,time,limit,out,spec): <--- TODO:Parameter?
+#Die impl. Variante ist noch sehr statisch...
+def create_script(bin,spec):
+    if (os.path.isfile('sc.sh'))==False:
+        shell('touch sc.sh') 
+    file_w('sc.sh','#!/bin/bash','a')
+    #file_w('sc.sh','#SBATCH --partition={}'.format(par),'a')
+    file_w('sc.sh','#SBATCH --partition=vl - parcio','a')
+    file_w('sc.sh','#SBATCH -N 2','a')
+    file_w('sc.sh','#SBATCH --mem=4000M','a')
+    file_w('sc.sh','#SBATCH --ntasks-per-node=2','a')
+    file_w('sc.sh','#SBATCH -J Benchmark','a')
+    file_w('sc.sh','#SBATCH -o b_results.%J.out','a')
+    file_w('sc.sh','#SBATCH -e b_errors.%J.err','a')
+    file_w('sc.sh','#SBATCH -e b_errors.%J.err','a')
+    file_w('sc.sh','\n','a')
+    file_w('sc.sh','source ~/spack/share/spack/setup-env.sh','a')
+    
+    module = (spec.replace('^',' ')).split()
+    for _ in range(0,len(module)):
+        file_w('spack load {}',module[_],'a')
+    file_w('sc.sh','mpirun -np 2 {}'.format(bin),'a')
+    
+    
 
 #Hiermit soll das Skript ausgeführt werden
 #Übergabe eines Skripts an SLURM <--- Vorschlag: vielleicht erst mal mit einem statischen Skript?
-def run_hpl():
-    print('---')
+def hpl_run(id):
+
+    #Welches Profil wird benutzt?
+    cfg = hpl_cfg_pth+'hpl_cfg_{}.txt'.format(str(id))
+    
+    #Was ist das spec?
+    spec = get_hpl_spec(cfg)
+    _ = spec.find('^')
+    spec_short = (spec[:_]).strip()
+    
+    #Was ist der Pfad zur Binary & HPL.dat?
+    pth = shell(spack_binary+' find --paths '+spec_short)
+    _ = pth.find('/home')
+    pth = ((pth[_:]).strip()+'/bin')
+    
+    #Sind die entsprechenden Module überhaupt verfügbar?
+    #<--- TODO: Funktion die das prüft, wenn nein, dann installieren!
+    
+    #Die passende HPL.dat muss angepasst werden!
+    set_data_hpl(cfg, pth)
+    
+    #Jetzt soll das Skript gebaut werden
+    print('\n\nbuild_hpl({},{},{}\n\n)'.format(cfg, pth, spec))
+    build_hpl(cfg, pth, spec)
+    
+    
 
 #Ein Art Prompt für den Nutzer
 def input_format():
@@ -101,6 +174,10 @@ def menu(txt=0, back=0):
         osu_menu(back,txt)           
 
     elif opt[0:5] == 'code:':
+        clear()
+        eval(opt[5:])
+        #Zum Testen erst mal noch so lassen
+        """
         try:
             clear()
             r = eval(opt[5:])
@@ -108,7 +185,7 @@ def menu(txt=0, back=0):
         except Exception as exc:
             error_log(' {} [Exception]'.format(type(exc).__name__))
             menu('Exception: {}'.format(type(exc).__name__))
-
+        """
 
     
     elif opt[0:6] == 'shell:':
@@ -172,7 +249,9 @@ def file_r(name, pos):
         error_log(' {} [Exception]'.format(type(exc).__name__))
         menu('Exception: {}'.format(type(exc).__name__))
 
-#Schreibfunktion: In welche Datei? Welchen Text? An welche Position? bzw. 'a' für anhängen/append    
+
+#Diese Variante ist verbuggt (Lines werden nicht überschrieben, sondern Einträge werden davorgeschrieben)
+"""
 def file_w(name, txt, pos):
     try:
         if(pos!='a'):
@@ -182,6 +261,33 @@ def file_w(name, txt, pos):
             #...ändern den passenden Index ab...
             #-> Vorsicht: Index-Fehler bzgl. leerer Zeilen!
             stringlist[int(pos)]=txt
+            #...und schreiben sie wieder zurück
+            with open(name, 'w') as f:      
+                f.writelines(stringlist)
+        else:
+            with open(name, "a") as f:     
+                f.write('\n'+txt)
+    except Exception as exc:     
+        error_log(' {} [Exception]'.format(type(exc).__name__))
+        menu('Exception: {}'.format(type(exc).__name__))
+"""
+
+#Schreibfunktion: In welche Datei? Welchen Text? An welche Position? bzw. 'a' für anhängen/append
+def file_w(name, txt, pos):
+    try:
+        if(pos!='a'):
+            #Wir holen uns eine Stringliste...
+            with open(name, 'r') as f:      
+                stringlist = f.readlines()
+            #...ändern den passenden Index ab...
+            #-> Vorsicht: Index-Fehler bzgl. leerer Zeilen!
+            print('Schreibtest (vor-1): '+stringlist[int(pos-1)])
+            print('Schreibtest (vor): '+stringlist[int(pos)])
+            print('Schreibtest (vor+1): '+stringlist[int(pos+1)])
+            stringlist[int(pos)]=txt
+            print('Schreibtest (nach-1): '+stringlist[int(pos-1)])
+            print('Schreibtest (nach): '+stringlist[int(pos)])
+            print('Schreibtest (nach+1): '+stringlist[int(pos+1)])
             #...und schreiben sie wieder zurück
             with open(name, 'w') as f:      
                 f.writelines(stringlist)
