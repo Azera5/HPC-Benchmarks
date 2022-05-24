@@ -59,52 +59,37 @@ def set_data_hpl(cfg, pth):
             file_w(pth+'/HPL.dat',file_r(cfg,_+11),_)
     """
 
-#Hiermit soll das Skript gebaut werden    
-def build_hpl(cfg, pth, spec):
-    print('DBG --- build_hpl würde hier bauen')
-    
-
-
-#lieber mit spack load
-"""
-srun -p vl - parcio -- pty bash
-source spack/share/spack/setup-env.sh
-module avail
-module load hpl-2.3-gcc-8.5.0-m4rmdjk
-module load openmpi-4.1.3-gcc-8.5.0-dm5ykbl
-module load openblas-0.3.20-gcc-8.5.0-lnllhmy
-module list
-cd spack/opt/spack/linux-centos8-x86_64_v3/gcc-8.5.0/hpl-2.3-m4rmdjkqu7zmzc2b5kmjq6xhtdx7mdvr/bin
-mpirun -np 2 xhpl
-"""
-
-#def create_script(par,hw_alloc,time,limit,out,spec): <--- TODO:Parameter?
-#Die impl. Variante ist noch sehr statisch...
-def create_script(bin,spec):
+#Hiermit soll das Skript gebaut werden
+#Welche Parameter wären sinnvoll? <---- TODO 
+def build_hpl(id, bin, spec):
     if (os.path.isfile('sc.sh'))==False:
         shell('touch sc.sh') 
     file_w('sc.sh','#!/bin/bash','a')
     #file_w('sc.sh','#SBATCH --partition={}'.format(par),'a')
-    file_w('sc.sh','#SBATCH --partition=vl - parcio','a')
+    file_w('sc.sh','#SBATCH --partition=vl-parcio','a')
     file_w('sc.sh','#SBATCH -N 2','a')
     file_w('sc.sh','#SBATCH --mem=4000M','a')
-    file_w('sc.sh','#SBATCH --ntasks-per-node=2','a')
-    file_w('sc.sh','#SBATCH -J Benchmark','a')
-    file_w('sc.sh','#SBATCH -o b_results.%J.out','a')
-    file_w('sc.sh','#SBATCH -e b_errors.%J.err','a')
-    file_w('sc.sh','#SBATCH -e b_errors.%J.err','a')
+    file_w('sc.sh','#SBATCH --cpus-per-task=4','a')
+    #Sinnvoller Jobname <--- TODO: evtl. Zeit, id? etc.
+    #file_w('sc.sh','#SBATCH -J HPL-Benchmark[{}][{}]'.format(str(id), str(datetime.datetime.now())),'a')
+    file_w('sc.sh','#SBATCH --job-name=hpl-test','a')
+    #Info %j sollte zur ID (Zuw. des Jobs von SLURM, *nicht* config) und x% zum Namen ausgewertet werden! 
+    file_w('sc.sh','#SBATCH -o %x.out','a')
+    file_w('sc.sh','#SBATCH -e %x.err','a')
     file_w('sc.sh','\n','a')
     file_w('sc.sh','source ~/spack/share/spack/setup-env.sh','a')
     
+    #Welche Module müssen geladen werden?
     module = (spec.replace('^',' ')).split()
     for _ in range(0,len(module)):
-        file_w('spack load {}',module[_],'a')
-    file_w('sc.sh','mpirun -np 2 {}'.format(bin),'a')
+        file_w('sc.sh', 'spack load {}'.format(module[_]),'a')
     
+    #Ist das wirklich notwendig für den Zugriff auf HPL.dat? <---- TODO
+    file_w('sc.sh','cd {}'.format(bin),'a')
     
-
+    file_w('sc.sh','mpirun -np 8 {}/xhpl'.format(bin),'a')
+    
 #Hiermit soll das Skript ausgeführt werden
-#Übergabe eines Skripts an SLURM <--- Vorschlag: vielleicht erst mal mit einem statischen Skript?
 def hpl_run(id):
 
     #Welches Profil wird benutzt?
@@ -120,15 +105,15 @@ def hpl_run(id):
     _ = pth.find('/home')
     pth = ((pth[_:]).strip()+'/bin')
     
-    #Sind die entsprechenden Module überhaupt verfügbar?
+    #Sind die entsprechenden Module überhaupt verfügbar? (Grafik Schritt 1)
     #<--- TODO: Funktion die das prüft, wenn nein, dann installieren!
     
-    #Die passende HPL.dat muss angepasst werden!
+    #Die passende HPL.dat muss angepasst werden! (Grafik Schritt 2)
     set_data_hpl(cfg, pth)
     
-    #Jetzt soll das Skript gebaut werden
+    #Jetzt soll das Skript gebaut werden (Grafik Schritt 3)
     print('\n\nbuild_hpl({},{},{}\n\n)'.format(cfg, pth, spec))
-    build_hpl(cfg, pth, spec)
+    build_hpl(id, pth, spec)
     
     
 
