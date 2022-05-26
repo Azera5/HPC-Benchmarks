@@ -211,9 +211,9 @@ def osu_menu(back,txt):
         menu(view_install_specs('mvapich2'),'3')
     elif opt == '3' or opt == 'install':
         clear()
-        print("Name und Version optional\npackage@version%compiler@version\n") 
+        print("spec^spec^...^spec\n") 
         print(' ')  
-        menu(install_spec(str(input_format()),'mvapich2'),'3')        
+        menu(install_spec(str(input_format())),'3')        
     else:
         clear()
         menu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1','3')
@@ -266,14 +266,16 @@ def file_w(name, txt, pos):
                 stringlist = f.readlines()
             #...ändern den passenden Index ab...
             #-> Vorsicht: Index-Fehler bzgl. leerer Zeilen!
-            print('Schreibtest (vor-1): '+stringlist[int(pos-1)])
-            print('Schreibtest (vor): '+stringlist[int(pos)])
-            print('Schreibtest (vor+1): '+stringlist[int(pos+1)])
+            
+            #print('Schreibtest (vor-1): '+stringlist[int(pos-1)])
+            #print('Schreibtest (vor): '+stringlist[int(pos)])
+            #print('Schreibtest (vor+1): '+stringlist[int(pos+1)])
             stringlist[int(pos)]=txt
-            print('Schreibtest (nach-1): '+stringlist[int(pos-1)])
-            print('Schreibtest (nach): '+stringlist[int(pos)])
-            print('Schreibtest (nach+1): '+stringlist[int(pos+1)])
+            #print('Schreibtest (nach-1): '+stringlist[int(pos-1)])
+            #print('Schreibtest (nach): '+stringlist[int(pos)])
+            #print('Schreibtest (nach+1): '+stringlist[int(pos+1)])
             #...und schreiben sie wieder zurück
+            
             with open(name, 'w') as f:      
                 f.writelines(stringlist)
         else:
@@ -295,139 +297,102 @@ def view_install_specs(name=0):
         error_log(' {} [Exception]'.format(type(exc).__name__))
         menu('Exception: {}'.format(type(exc).__name__))
 
-#Überprüft ob die angegebene Version existiert
-def check_version(name,version):
-    try:
-        if name == 'error':
-            return 'error'    
+#Prüft Installationsausdruck auf grobe Syntaxfehler
+def check_expr_syn(expr):
+    expr_list=['@%','%@','^%','%^','^@','@^']
+    for _ in expr_list:
+        r=expr.find(_)
+        if r != -1:
+            print('Syntaxfehler an Position: '+str(r))
+            return False
+    return True
+
+#Überprüft ob ein einzelner spec (Name + Version) existiert
+def check_spec(name,version=-1):
+    try:        
         out = shell('spack info '+str(name))
-        if out.find(version) != -1:
-            return name
-        else: 
-            return 'error'
+        #Falls keine Version vorhanden
+        if version == -1:
+            if out.find('Error')== -1:
+                return True 
+        elif out.find(version) != -1:
+            return True         
+        return False
+    
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__))
         menu('Exception: {}'.format(type(exc).__name__))
-        
 
-#Liefert empfohlene (aktuellste) Version     
-def find_last_version(name):
-    try:
-        if name == 'error':
-            return 'error'
-        version = ''       
-        out = shell('spack info '+str(name))         
-        lines=out.split('\n')        
-        for _ in lines:           
-            if "Preferred version:" in str(_):
-                index = lines.index(str(_))                
-                for i in lines[index+1]:
-                    if i.isdigit() or i is '.':
-                        version=version+i
-                    if i is 'h':
-                        return version
-        if version == '':
-            return'error'
-        
-    except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
-        return 'Exception: {}'.format(type(exc).__name__)
-        
- 
-#Format des input: name@version%compiler@version 
-#Name und Versionen sind optional!
-def extract(input,menu):
-    try:
-        #Vorbreitung des Eingabe
-        out = ['','','','']
-        input.replace(' ','')
-        if input.find('%')==-1:
-            return 'error'
-        elif input[0]=='%':
-            arr=[input]
-        else:
-            arr = input.split('%')
-            arr[1] = '%'+arr[1]
-        
-        #Sondefall: Nur Compilername gegeben
-        if arr[0][:1]=='@' or arr[0][:1]=='%':            
-            if(menu=='main'):                
-                print('Kein Packagename\nNeue Eingabe oder Abbruch(q)\n')
-                out[0]=str(input_format())            
+#Prüft ob Installationsausdruck gültig ist (alle Specs)
+def check_expr(expr):
+    if check_expr_syn(expr):
+        arr = expr.split('^')              
+        for spec in arr:
+            s=spec.split('%')            
+            if s[0][:0]=='@':
+                #print('Name fehlt!')
+                #Package Name fehlt
+                return False
+               
+            s=spec.split('@')
+            if len(s) > 1:                    
+                if not check_spec(s[0],s[1]):                   
+                    #print(s[0]+'@'+s[1]+' existiert nicht')
+                    #Version existiert nicht
+                    return False
             else:
-                out[0]=menu            
-            
-            if arr[0][:1]!='@':
-                out[1]=find_last_version(out[0])
-                arr=['',arr[0]]
-            else:                
-                out[1]=check_version(out[0],arr[0][1:arr.find('%')-1])           
-            
-        #Extrahiere Package Spezifikationen          
-        elif arr[0].find('%') == -1:
-            if arr[0].find('@') == -1:
-                out[0] = arr[0]
-                out[1]=find_last_version(arr[0])
-            else:
-                temp=arr[0].split('@')
-                out[0] = temp[0]            
-                out[1] = check_version(out[0],temp[1]) 
+                if not check_spec(s[0]):
+                    #Package existiert nicht
+                    #print(s[0]+' existiert nicht')
+                    return False
+       
+        return True
+    #Syntaxfehler im Ausdruck
+    return False
 
-        #Extrahiere Compiler Spezifikationen 
-        if arr[1].find('@') == -1:             
-            out[2] = arr[1][1:]            
-            out[3] = find_last_version(arr[1][1:])            
-        else:            
-            arr = arr[1].split('@')          
-            out[2] = arr[1][1:]
-            out[3] = check_version(out[2],arr[1])
-            
+#Entfernt bereits installierte specs aus Installationsausdruck
+def remove_installed_spec(expr):
+    arr=expr.split('^')
+    all_specs=view_install_specs()
+    out=''
+    for _ in arr:        
+        if all_specs.find(_)==-1:
+            out=out+'^'+_
+    if out!='':        
+        return out[1:]
+    else:
         return out
-        
-    except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
-        menu('Exception: {}'.format(type(exc).__name__))
+    
+#Schreibt Script zum installieren der specs 
+#TODO: Auslagern der Slurmparameter                    
+def install_spec(expr):
+        if check_expr(expr):
+            expr=remove_installed_spec(expr)            
+            if expr != '':
+                if (os.path.isfile('install.sh'))==False: 
+                    shell('touch install.sh')            
+                s='#!/bin/bash\n' \
+                    + '#SBATCH --nodes=1\n' \
+                    +'#SBATCH --ntasks=1\n' \
+                    +'#SBATCH --partition=vl-parcio\n' \
+                    +'#SBATCH --output=install.out\n' \
+                    +'#SBATCH --error=install.err\n' \
+                    +'echo spack install ' \
+                    + expr
+                #Achtung write besser vorher install.sh leeren
+                file_w('install.sh',' ','a')
+                file_w('install.sh',str(s),0)
+                #print(shell('cat install.sh'))
+                #shell('rm install.sh')
+                return 'Installation läuft'
+            else: 
+                return 'Bereits alles installiert!'
                 
-                
-def install_spec(input,menu):
-    try:
-        #Par = [PackageName, PackageVersion, Compiler, Compilerversion]
-        para = extract(input,menu)        
-        
-        #Abfangen nicht existierender Packages, Compiler oder Versionen
-        if str(para).find('error')!=-1:
-            return 'Abbruch: Falsche Eingabe!'
         else:
-            #install command
-            spec=str(para[0])+'@'+str(para[1])+' %'+str(para[2])+'@'+str(para[3])
-            #Check ob spec bereits installiert ist
-            if view_install_specs().find(spec) != -1:
-                return 'Job ID: [comming soon] ' + spec
-            #TODO Slurmscript schreiben, evtl in eigene Funktion auslagern?
-            else:
-                return spec +' ist bereits installiert'
-            
-    
-    except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
-        return 'Exception: {}'.format(type(exc).__name__)
-    
+            return 'Kann nicht installiert werden!'
+             
 
-#Diese Funktion klappt, kann aber nicht alles! z.B. 'echo $$' printet nicht die Shell-PID!
-"""
-def shell(command): 
-    try:
-        #Ausgabe soll nicht direkt auf's Terminal (würde durch erneuten menu()-Aufruf überschrieben werden)
-        #.split <=> Strings in Listen verwandeln; Nicht nötig falls shell=True
-        p = subprocess.run(str(command).split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        if(p.returncode!=0):
-            error_log('returncode is non-zero')
-        #.stdout liefert einen Binärstring desw. die Dekodierung
-        return p.stdout.decode('UTF-8')
-    except Exception as exc:
-        error_log(' {} [Exception]'.format(type(exc).__name__))
-        menu('Exception: {}'.format(type(exc).__name__))
-"""
+
 
 def shell(command): 
     try:
