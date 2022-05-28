@@ -82,7 +82,7 @@ def clear():
 
 #Liefert Files, keine Verzeichnisse
 def get_names(pth):
-    r = os.listdir(path)
+    r = os.listdir(pth)
     for _ in r:
         if os.path.isdir(_)==True:
             r.remove(_)
@@ -221,6 +221,12 @@ def printmenu(txt = ''):
 def menu():
     
     global errorstack
+    print('Test: Welche Pfade sind nötig zum anzeigen des Inhalts?'
+    print(get_names(hpl_cfg_pth))
+    print(get_names(spack_binary))
+    print(get_names('/'+hpl_cfg_pth))
+    print(get_names(spack_binary+'/'))
+
     
     #Damit man die Optionen sehen kann
     printmenu()
@@ -318,7 +324,7 @@ def get_hpl_spec(pth):
     return spec
 """
 
-#Bekommt eine Config_Liste, liefert die package spec
+#Bekommt eine Liste bzgl. der Packages aus einer Config, liefert die package spec
 def get_hpl_spec(cfg_list):
     symb = ['@', '%', '@', '^', '@', '%', '@', '^', '@', '%', '@']
     spec = 'hpl'
@@ -332,7 +338,7 @@ def get_hpl_spec(cfg_list):
     print('DBG --- get_hpl_spec(pth) ermittelt:'+spec)
     return spec
 
-def get_cfg(pth)
+def get_cfg(pth):
     return 'noch nicht implementiert...'
     #TODO: get_cfg_names sollte getestet sein...
     #return cfg_list
