@@ -221,13 +221,7 @@ def printmenu(txt = ''):
 def menu():
     
     global errorstack
-    print('Test: Welche Pfade sind nötig zum anzeigen des Inhalts?'
-    print(get_names(hpl_cfg_pth))
-    print(get_names(spack_binary))
-    print(get_names('/'+hpl_cfg_pth))
-    print(get_names(spack_binary+'/'))
-
-    
+ 
     #Damit man die Optionen sehen kann
     printmenu()
     
