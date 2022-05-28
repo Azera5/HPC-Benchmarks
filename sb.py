@@ -5,35 +5,198 @@ import datetime
 import math
 import inspect
 import time
+import fnmatch
 
 hpl_cfg_pth = 'config/hpl/'
 spack_binary = '~/spack/bin/spack'
+errorstack = []
+
+
+
+"""
+Debug- & Hilfs-Funktionen
+"""
 
 #In welcher Funktion ist wann, welche Exception o.a. Unregelmäßigkeit aufgetreten?
 def error_log(txt):
+    global errorstack
     txt = str(inspect.stack()[1][3])+' [Funktion] '+str(datetime.datetime.now())+' [Zeitpunkt] '+txt+'\n'
     file_w('log.txt', txt, 'a')
+    errorstack.append(txt)
+
+#Prüft ob der Fehlerstack leer ist
+def check_err_stack():
+    if len(errorstack)!=0:
+        return '...Einträge vorhanden'
+    else:
+        return ''
+
+#Wertet einen Terminalbefehl aus
+def shell(cmd): 
+    try:
+        #Ausgabe soll nicht direkt auf's Terminal
+        p = subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+        if(p.returncode!=0):
+            error_log('returncode ist nicht null!')
+        #.stdout liefert einen Binärstring desw. die Dekodierung
+        return p.stdout.decode('UTF-8')
+    except Exception as exc:
+        error_log(' {} [Exception]'.format(type(exc).__name__))
+
+#Wertet einen Python-Ausdruck aus
+def code_eval(expr):
+    try:
+        return eval(expr)
+    except Exception as exc:
+        error_log(' {} [Exception]'.format(type(exc).__name__))
 
 #Existieren überhaupt log.txt, config/hpl/, config/hpl/hpl_cfg_[d, 1, ..., n] etc.
 def check():
     str = ''
-    if (os.path.isfile('log.txt'))==False:     
+    if os.path.isfile('log.txt')==False:     
         shell('touch log.txt')
         str = str+'errorlog erstellt ...\n'
-    if (os.path.isdir(hpl_cfg_pth))==False:     
+    if os.path.isdir(hpl_cfg_pth)==False:     
         shell('mkdir -p '+hpl_cfg_pth)
         str = str+'Config-Verzeichnis für HPL erstellt ...\n'
         #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
-    if (os.path.isfile(hpl_cfg_pth+'hpl_cfg_d.txt'))==False:     
+    if os.path.isfile(hpl_cfg_pth+'hpl_cfg_d.txt')==False:     
         shell('touch '+hpl_cfg_pth+'hpl_cfg_d.txt')
         str = str+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
-    menu(str)
     #Wäre gut wenn man sehen könnte ob lokale spack Installation da ist oder nicht, vll auch mit Pfadangabe...
 
+#Liefert für eine Configzeile "123.4.5   [Parameter x]" nur die Zahl
 def config_cut(line):
     line = line[:line.find("[")]
     return line.strip()
 
+#Ein Art Prompt für den Nutzer
+def input_format():
+    print(' ')
+    print('Eingabe: ', end='')
+    return input()
+
+def clear():
+    os.system('clear')
+    #print('\n\n\n---Debugprint---\n\n\n')
+
+#Liefert Files, keine Verzeichnisse
+def get_names(pth):
+    r = os.listdir(path)
+    for _ in r:
+        if os.path.isdir(_)==True:
+            r.remove(_)
+    return r
+
+#Liefert Textfiles eines bestimmten Typs (z.B. hpl_cfg_(...).txt)
+def get_cfg_names(pth, type):
+    return fnmatch.filter(get_names(pth), type+'_cfg_*.txt')
+
+
+
+"""
+Menüfunktionen
+"""
+
+def printmenu(txt = ''):
+    clear()
+    print('---Menü---')
+    print('(0) Exit')
+    print('(1) Optionen')
+    #evtl. anzeigen lassen, dass die Profile lauffähig sind?
+    print('(2) HPL')
+    print('(3) OSU')
+    print('(4) Fehleranzeige {}'.format(check_err_stack()))
+    print(' ')
+    print(str(txt))
+
+
+#Hauptmenü
+def menu():
+    
+    global errorstack
+    
+    #Damit man die Optionen sehen kann
+    printmenu()
+    
+    #Interaktivität mit Nutzereingabe
+    while True:
+        opt = input_format()
+
+        if opt == '0' or opt == 'q':
+            clear()
+            #SystemExit(0)
+            break
+        elif opt == '1' or opt == 'options':       
+            printmenu('Info: Noch nicht implementiert...')           
+        elif opt == '2' or opt == 'hpl':
+            printmenu('Info: Noch nicht implementiert...')      
+        elif opt == '3'or opt == 'osu':
+            printmenu('Info: Noch nicht implementiert...')
+        elif opt == '4':
+            elist = ''
+            while len(errorstack)!=0:
+                elist = elist + '\n' + errorstack.pop()
+            printmenu('Zuletzt aufgetretene Fehler... {}'.format(elist))
+        elif opt[0:5] == 'code:':
+            r = code_eval(opt[5:])
+            printmenu('Rückgabe: '+str(r)+' [print] --- '+str(type(r))+' [typ]')
+        elif opt[0:6] == 'shell:':
+            r = str(shell(opt[6:]))
+            printmenu('Ausgabe: \n'+r)   
+        else:
+            printmenu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')   
+
+
+
+"""
+Allgemeine I/O Funktionen
+"""
+
+#Lesefunktion: In welche Datei? An welche Position?  
+def file_r(name, pos):  
+    try:     
+        with open(name, 'r') as f:      
+            stringlist = f.readlines()
+            return stringlist[int(pos)]
+    except Exception as exc:     
+        error_log(' {} [Exception]'.format(type(exc).__name__))
+
+#Schreibfunktion: In welche Datei? Welchen Text? An welche Position? bzw. 'a' für anhängen/append
+def file_w(name, txt, pos):
+    try:
+        if(pos!='a'):
+            #Wir holen uns eine Stringliste...
+            with open(name, 'r') as f:      
+                stringlist = f.readlines()
+            #...ändern den passenden Index ab...
+            #-> Vorsicht: Index-Fehler bzgl. leerer Zeilen!
+            
+            #print('Schreibtest (vor-1): '+stringlist[int(pos-1)])
+            #print('Schreibtest (vor): '+stringlist[int(pos)])
+            #print('Schreibtest (vor+1): '+stringlist[int(pos+1)])
+            stringlist[int(pos)]=txt
+            #print('Schreibtest (nach-1): '+stringlist[int(pos-1)])
+            #print('Schreibtest (nach): '+stringlist[int(pos)])
+            #print('Schreibtest (nach+1): '+stringlist[int(pos+1)])
+            #...und schreiben sie wieder zurück
+            
+            with open(name, 'w') as f:      
+                f.writelines(stringlist)
+        else:
+            with open(name, "a") as f:     
+                f.write('\n'+txt)
+    except Exception as exc:     
+        error_log(' {} [Exception]'.format(type(exc).__name__))
+
+
+
+"""
+Funktionen die HPL zuzuordnen sind
+"""
+
+#Zu entfernen sobald die fortgeschritteneren Funktionen fertig sind
+"""
 #Passende Index-Grenzen für die Config setzen <--- TODO
 def get_hpl_spec(pth):
     symb = ['@', '%', '@', '^', '@', '%', '@', '^', '@', '%', '@']
@@ -47,6 +210,26 @@ def get_hpl_spec(pth):
             spec = spec+symb[_]
     print('DBG --- get_hpl_spec(pth) ermittelt:'+spec)
     return spec
+"""
+
+#Bekommt eine Config_Liste, liefert die package spec
+def get_hpl_spec(cfg_list):
+    symb = ['@', '%', '@', '^', '@', '%', '@', '^', '@', '%', '@']
+    spec = 'hpl'
+    #Cofig-Zeile ab 1 aber Symbol-Liste ab 0, desw. der Index-Offeset
+    for _ in range(0,11):
+        symb[_] = symb[_]+config_cut(cfg_l[1][_+1])
+        #Nur anhängen, wenn auch was in der Config stand
+        #Vorsicht: Es müsste noch geprüft werden ob vor einem @blabla überhaupt etwas steht!
+        if len(symb[_])>2:
+            spec = spec+symb[_]
+    print('DBG --- get_hpl_spec(pth) ermittelt:'+spec)
+    return spec
+
+def get_cfg(pth)
+    return 'noch nicht implementiert...'
+    #TODO: get_cfg_names sollte getestet sein...
+    #return cfg_list
 
 #Hier soll HPL.dat dem Profil entsprechend justiert werden
 def set_data_hpl(cfg, pth):
@@ -79,16 +262,18 @@ def build_hpl(id, bin, spec):
     file_w('sc.sh','\n','a')
     file_w('sc.sh','source ~/spack/share/spack/setup-env.sh','a')
     
-    #Welche Module müssen geladen werden?
+    #Welche Packages müssen geladen werden?
     module = (spec.replace('^',' ')).split()
     for _ in range(0,len(module)):
         file_w('sc.sh', 'spack load {}'.format(module[_]),'a')
     
     #Ist das wirklich notwendig für den Zugriff auf HPL.dat? <---- TODO
+    #Tipp: Flag prüfen für HPL.dat Verzeichnis
     file_w('sc.sh','cd {}'.format(bin),'a')
     
     file_w('sc.sh','mpirun -np 8 {}/xhpl'.format(bin),'a')
-    
+
+"""
 #Hiermit soll das Skript ausgeführt werden
 def hpl_run(id):
 
@@ -106,7 +291,8 @@ def hpl_run(id):
     pth = ((pth[_:]).strip()+'/bin')
     
     #Sind die entsprechenden Module überhaupt verfügbar? (Grafik Schritt 1)
-    #<--- TODO: Funktion die das prüft, wenn nein, dann installieren!
+    #<--- TODO: Funktion die das prüft, wenn nein, dann melden!
+    #UPDATE: evtl. das Prüfen auslagern...
     
     #Die passende HPL.dat muss angepasst werden! (Grafik Schritt 2)
     set_data_hpl(cfg, pth)
@@ -114,78 +300,30 @@ def hpl_run(id):
     #Jetzt soll das Skript gebaut werden (Grafik Schritt 3)
     print('\n\nbuild_hpl({},{},{}\n\n)'.format(cfg, pth, spec))
     build_hpl(id, pth, spec)
-    
-    
 
-#Ein Art Prompt für den Nutzer
-def input_format():
-    print(' ')
-    print('Eingabe: ', end='')
-    return input()
+#TODO Möglichkeit ein bzw. alle Profile laufen lassen
+"""
 
-def menu(txt=0, back=0):
-    #Umleitung in aktuelles Menu
-    if back !=0:
-        clear()
-        opt = back
-        
-    else:
-        print('---Menü---')
-        print('(0) Exit')
-        print('(1) Optionen')
-        print('(2) HPL')
-        print('(3) OSU')
-        print(' ')
+def hpl_run(id):
     
-    #Nachrichten an den Nutzer aus vorh. Vorgängen: Exceptions, stdout von Subshell-Aufrufen...
-    if txt != 0 and back==0:
-        print(str(txt))
+    #Hol alle cfg_lists in eine Übergeordnete Liste
+    profile_list = []
+    #TODO: get_cfg() sollte fertig sein
     
-    #Nutzereingabe
-    if back == 0:
-        opt = str(input_format())
-    if opt == '0' or opt == 'q':
-        clear()
-        SystemExit(0)
-    elif opt == '1' or opt == 'options':
-        clear()       
-        menu('Info: Noch nicht implementiert...')
-    elif opt == '2' or opt == 'hpl':
-        clear()
-        menu('Info: Noch nicht implementiert...')
+    #Prüfe ob alle verfügbar sind, breche sonst ab TODO
     
-    elif opt == '3'or opt == 'osu':
-        clear()
-        osu_menu(back,txt)           
+    #Lasse eine Funktion daraus ein Skript bauen
+    
+    #Lass das Skript laufen
+    
+    return 'noch nicht implementiert...'
 
-    elif opt[0:5] == 'code:':
-        clear()
-        eval(opt[5:])
-        #Zum Testen erst mal noch so lassen
-        """
-        try:
-            clear()
-            r = eval(opt[5:])
-            menu('Rückgabe: '+str(r)+' [print] --- '+str(type(r))+' [typ]')
-        except Exception as exc:
-            error_log(' {} [Exception]'.format(type(exc).__name__))
-            menu('Exception: {}'.format(type(exc).__name__))
-        """
+"""
+Funktionen die OSU zuzuordnen sind
+"""  
 
-    
-    elif opt[0:6] == 'shell:':
-        try:
-            clear()
-            menu('Ausgabe: \n'+str(shell(opt[6:])))
-        except Exception as exc:
-            error_log(' {} [Exception]'.format(type(exc).__name__))
-            menu('Exception: {}'.format(type(exc).__name__))
-   
-  
-    else:
-        clear()
-        menu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')    
-
+#TODO: OSU-Menü kompatibel zum aktuellen machen
+"""
 def osu_menu(back,txt):    
     print('---OSU---')
     print('(0) Back')
@@ -217,74 +355,7 @@ def osu_menu(back,txt):
     else:
         clear()
         menu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1','3')
-
-         
-         
-def clear():
-    os.system('clear')
-    #print('\n\n\n---Debugprint---\n\n\n')
-
-#Lesefunktion: In welche Datei? An welche Position?  
-def file_r(name, pos):  
-    try:     
-        with open(name, 'r') as f:      
-            stringlist = f.readlines()
-            return stringlist[int(pos)]
-    except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
-        menu('Exception: {}'.format(type(exc).__name__))
-
-
-#Diese Variante ist verbuggt (Lines werden nicht überschrieben, sondern Einträge werden davorgeschrieben)
 """
-def file_w(name, txt, pos):
-    try:
-        if(pos!='a'):
-            #Wir holen uns eine Stringliste...
-            with open(name, 'r') as f:      
-                stringlist = f.readlines()
-            #...ändern den passenden Index ab...
-            #-> Vorsicht: Index-Fehler bzgl. leerer Zeilen!
-            stringlist[int(pos)]=txt
-            #...und schreiben sie wieder zurück
-            with open(name, 'w') as f:      
-                f.writelines(stringlist)
-        else:
-            with open(name, "a") as f:     
-                f.write('\n'+txt)
-    except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
-        menu('Exception: {}'.format(type(exc).__name__))
-"""
-
-#Schreibfunktion: In welche Datei? Welchen Text? An welche Position? bzw. 'a' für anhängen/append
-def file_w(name, txt, pos):
-    try:
-        if(pos!='a'):
-            #Wir holen uns eine Stringliste...
-            with open(name, 'r') as f:      
-                stringlist = f.readlines()
-            #...ändern den passenden Index ab...
-            #-> Vorsicht: Index-Fehler bzgl. leerer Zeilen!
-            
-            #print('Schreibtest (vor-1): '+stringlist[int(pos-1)])
-            #print('Schreibtest (vor): '+stringlist[int(pos)])
-            #print('Schreibtest (vor+1): '+stringlist[int(pos+1)])
-            stringlist[int(pos)]=txt
-            #print('Schreibtest (nach-1): '+stringlist[int(pos-1)])
-            #print('Schreibtest (nach): '+stringlist[int(pos)])
-            #print('Schreibtest (nach+1): '+stringlist[int(pos+1)])
-            #...und schreiben sie wieder zurück
-            
-            with open(name, 'w') as f:      
-                f.writelines(stringlist)
-        else:
-            with open(name, "a") as f:     
-                f.write('\n'+txt)
-    except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
-        menu('Exception: {}'.format(type(exc).__name__))
-
 
 def view_install_specs(name=0):
     try:
@@ -295,7 +366,6 @@ def view_install_specs(name=0):
     
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__))
-        menu('Exception: {}'.format(type(exc).__name__))
 
 #Prüft Installationsausdruck auf grobe Syntaxfehler
 def check_expr_syn(expr):
@@ -321,7 +391,6 @@ def check_spec(name,version=-1):
     
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__))
-        menu('Exception: {}'.format(type(exc).__name__))
 
 #Prüft ob Installationsausdruck gültig ist (alle Specs)
 def check_expr(expr):
@@ -390,28 +459,8 @@ def install_spec(expr):
                 
         else:
             return 'Kann nicht installiert werden!'
-             
-
-
-
-def shell(command): 
-    try:
-        #Ausgabe soll nicht direkt auf's Terminal (würde sonst durch erneuten menu()-Aufruf überschrieben werden)
-        p = subprocess.run(str(command), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
-        if(p.returncode!=0):
-            error_log('returncode ist nicht null!')
-        #.stdout liefert einen Binärstring desw. die Dekodierung
-        return p.stdout.decode('UTF-8')
-    except Exception as exc:
-        error_log(' {} [Exception]'.format(type(exc).__name__))
-        menu('Exception: {}'.format(type(exc).__name__))
 
 #Startpunkt
 clear()
 check()
-
-"""
-sb.py wurde vollkommen überarbeitet
--> weniger Funktionalität (erst mal: noch kein Installieren/Ausführen)
--> ich war aber bemüht Konventionen einzuhalten: Kontext-Manager statt open/close; Behandlung von Ausnahmen via try/except Blöcken inkl. Errorlogging usw.
-"""
+menu()
