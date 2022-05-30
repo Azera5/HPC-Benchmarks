@@ -2,16 +2,39 @@ import os
 import os.path
 import subprocess
 import datetime
-import math
 import inspect
 import time
 import fnmatch
 
-hpl_cfg_pth = 'config/hpl/'
-spack_binary = '~/spack/bin/spack'
+
+
+"""
+Potentielle Usereingaben
+"""
+
+hpl_cfg_pth = ''
+osu_cfg_pth = ''
+spack_binary = ''
+
+
+
+"""
+Hilfsvariablen
+"""
+#Sammelt kürzliche Fehlermeldungen
 errorstack = []
+#Trägt Informationen des Config-Ordners
+cfg_profiles = []
+#Initialnachricht
+initm = ''
 
+#Diese Abschnitte haben die hpl-Configs:
+hpl_cfg_abschnitt_1 = 11    # <=> bis zur elften Line geht es um das spec
+hpl_cfg_abschnitt_2 = 41    # <=> analog mit HPL.dat
+hpl_cfg_abschnitt_3 = 50    # <=> analog mit SLURM
 
+#Wieviele Benchmarktypen kennen wir?
+bench_count = 2
 
 """
 Debug- & Hilfs-Funktionen
@@ -32,12 +55,12 @@ def check_err_stack():
         return ''
 
 #Wertet einen Terminalbefehl aus
-def shell(cmd): 
+def shell(cmd):
     try:
         #Ausgabe soll nicht direkt auf's Terminal
         p = subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
         if(p.returncode!=0):
-            error_log('returncode ist nicht null!')
+            error_log('returncode der Eingabe \''+cmd+'\' war nicht null!')
         #.stdout liefert einen Binärstring desw. die Dekodierung
         return p.stdout.decode('UTF-8')
     except Exception as exc:
@@ -45,30 +68,61 @@ def shell(cmd):
 
 #Wertet einen Python-Ausdruck aus
 def code_eval(expr):
+    """
     try:
         return eval(expr)
     except Exception as exc:
         error_log(' {} [Exception]'.format(type(exc).__name__))
+    """
+    return eval(expr)
+
+#Ermittelt Pfade relevanter Verzeichnisse und Binaries, wenn nichts spezifiziert wurde
+def find_paths():
+    global hpl_cfg_pth, osu_cfg_pth, spack_binary   
+    #An der Stelle, an der das Programm ausgeführt wird, sollten auch die configs sein
+    if hpl_cfg_pth=='':
+        hpl_cfg_pth = str(shell('pwd')+'/config/hpl/').replace('\n','').strip()
+    if osu_cfg_pth=='':
+        osu_cfg_pth = str(shell('pwd')+'/config/osu/').replace('\n','').strip()
+    if spack_binary=='':
+        r_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()
+        #Wir nehmen die erstbeste spack Binary, wenn nichts per Hand spezifiziert wurde
+        spack_binary = r_list[0].strip()
+
+def check_data():
+    global cfg_profiles
+    #Für jeden Bench eine Liste, in jeder dieser Listen eine Liste pro Profil
+    _ = ['hpl:empty'*len(get_cfg_names(hpl_cfg_pth,'hpl'))]
+    cfg_profiles.append(_)
+    _ = ['osu:empty'*len(get_cfg_names(osu_cfg_pth,'osu'))]
+    cfg_profiles.append(_)
 
 #Existieren überhaupt log.txt, config/hpl/, config/hpl/hpl_cfg_[d, 1, ..., n] etc.
-def check():
-    str = ''
+def check_dirs():
+    global initm
+    #Hinweis: '/dir1/dir2/.../'[:-1] <=> '/dir1/dir2/...'
     if os.path.isfile('log.txt')==False:     
         shell('touch log.txt')
-        str = str+'errorlog erstellt ...\n'
-    if os.path.isdir(hpl_cfg_pth)==False:     
-        shell('mkdir -p '+hpl_cfg_pth)
-        str = str+'Config-Verzeichnis für HPL erstellt ...\n'
+        initm = initm+'errorlog erstellt ...\n'
+    if os.path.isdir(hpl_cfg_pth[:-1])==False:     
+        shell('mkdir -p '+hpl_cfg_pth[:-1])
+        initm = initm+'Config-Verzeichnis für HPL erstellt ...\n'
+        #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
+    if os.path.isdir(osu_cfg_pth[:-1])==False:     
+        shell('mkdir -p '+osu_cfg_pth[:-1])
+        initm = initm+'Config-Verzeichnis für OSU erstellt ...\n'
         #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
     if os.path.isfile(hpl_cfg_pth+'hpl_cfg_d.txt')==False:     
         shell('touch '+hpl_cfg_pth+'hpl_cfg_d.txt')
-        str = str+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
-    #Wäre gut wenn man sehen könnte ob lokale spack Installation da ist oder nicht, vll auch mit Pfadangabe...
+        initm = initm+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
 
 #Liefert für eine Configzeile "123.4.5   [Parameter x]" nur die Zahl
 def config_cut(line):
+    """
     line = line[:line.find("[")]
     return line.strip()
+    """
+    return line
 
 #Ein Art Prompt für den Nutzer
 def input_format():
@@ -80,7 +134,7 @@ def clear():
     os.system('clear')
     #print('\n\n\n---Debugprint---\n\n\n')
 
-#Liefert Files, keine Verzeichnisse
+#Liefert Files, keine Verz.; Erwartet Pfade in der Form /dir1/dir2/.../
 def get_names(pth):
     r = os.listdir(pth)
     for _ in r:
@@ -91,6 +145,8 @@ def get_names(pth):
 #Liefert Textfiles eines bestimmten Typs (z.B. hpl_cfg_(...).txt)
 def get_cfg_names(pth, type):
     return fnmatch.filter(get_names(pth), type+'_cfg_*.txt')
+
+
 
 """
 Installation
@@ -200,6 +256,7 @@ def install_spec(expr):
             return 'Kann nicht installiert werden!'
 
 
+
 """
 Menüfunktionen
 """
@@ -223,7 +280,7 @@ def menu():
     global errorstack
  
     #Damit man die Optionen sehen kann
-    printmenu()
+    printmenu(initm)
     
     #Interaktivität mit Nutzereingabe
     while True:
@@ -324,7 +381,7 @@ def get_hpl_spec(cfg_list):
     spec = 'hpl'
     #Cofig-Zeile ab 1 aber Symbol-Liste ab 0, desw. der Index-Offeset
     for _ in range(0,11):
-        symb[_] = symb[_]+config_cut(cfg_l[1][_+1])
+        symb[_] = symb[_]+config_cut(cfg_list[1][_+1])
         #Nur anhängen, wenn auch was in der Config stand
         #Vorsicht: Es müsste noch geprüft werden ob vor einem @blabla überhaupt etwas steht!
         if len(symb[_])>2:
@@ -332,20 +389,51 @@ def get_hpl_spec(cfg_list):
     print('DBG --- get_hpl_spec(pth) ermittelt:'+spec)
     return spec
 
-def get_cfg(pth):
-    return 'noch nicht implementiert...'
-    #TODO: get_cfg_names sollte getestet sein...
-    #return cfg_list
+#Holt die Config-Informationen in eine globale Variable
+def get_hpl_cfg(pth):
+    global cfg_profiles
+    names = get_cfg_names(pth, 'hpl')
+    sublist = []
+    #i-te Configzeile (int), p für Profil (string)
+    #[Benchmark: hpl=0, osu=1, ...][Profil-Nr. (opt.)][Abschnitt (opt.)]
+    for p in names:
+        print(p)
+        print(names.index(p))
+        #+1 zum Überspringen der Trennzeilen
+        for i in range(0+1,hpl_cfg_abschnitt_1):
+            sublist.append(config_cut(file_r(pth+p,i)))
+        cfg_profiles[0][names.index(p)][0] = sublist
+        print('----------')
+        print(sublist)
+        print('----------')
+        sublist = []
+        #+1 zum Überspringen der Trennzeilen
+        for i in range(hpl_cfg_abschnitt_1+1,hpl_cfg_abschnitt_2):
+            sublist.append(config_cut(file_r(pth+p,i)))
+        cfg_profiles[0][names.index(p)][1] = sublist
+        print('----------')
+        print(sublist)
+        print('----------')
+        sublist = []
+        #+1 zum Überspringen der Trennzeilen
+        for i in range(hpl_cfg_abschnitt_2+1,hpl_cfg_abschnitt_3):
+            sublist.append(config_cut(file_r(pth+p,i)))
+        cfg_profiles[0][names.index(p)][2] = sublist
+        print('----------')
+        print(sublist)
+        print('----------')
+    print('get_hpl_cfg Resultat:')
+    print(cfg_profiles)
 
-#Hier soll HPL.dat dem Profil entsprechend justiert werden
+#Funktion schreibt HPL-Abschnitt aus dem Config-Profil in eine HPL.dat (beide Pfade notwendig)
 def set_data_hpl(cfg, pth):
-    print('DBG: set_data_hpl hat die File gefunden -> '+str(os.path.isfile(pth+'/HPL.dat')))
+    print('DBG: set_data_hpl hat die File gefunden -> '+str(os.path.isfile(pth+'HPL.dat')))
     #Überschreiben mit Offeset (erst ab Index 13 geht der HPL Abschnitt in der Config los)
     #Auskommentiert bis Schreibfunktion gefixt ist <--- TODO
     """
-    if (os.path.isfile(pth+'/HPL.dat'))==True:
+    if (os.path.isfile(pth+'HPL.dat'))==True:
         for _ in range(2,30):
-            file_w(pth+'/HPL.dat',file_r(cfg,_+11),_)
+            file_w(pth+'HPL.dat',file_r(cfg,_+11),_)
     """
 
 #Hiermit soll das Skript gebaut werden
@@ -467,5 +555,8 @@ def osu_menu(back,txt):
 
 #Startpunkt
 clear()
-check()
+find_paths()
+check_data()
+check_dirs()
 menu()
+
