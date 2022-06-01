@@ -6,11 +6,61 @@ import math
 import inspect
 import time
 import fnmatch
+import re
+import argparse
+from argparse import RawTextHelpFormatter
 
 hpl_cfg_pth = 'config/hpl/'
+osu_cfg_pth = 'config/osu/'
 spack_binary = '~/spack/bin/spack'
 errorstack = []
 
+"""
+Command-Line-Parameter
+"""
+def cl_arg():
+    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
+    parser.add_argument('-i','--install',type=str,help=''+
+    'all: Installiert alle specs aus Install-config\n' +
+    'spec -> Installiert bestimmte spec\n\n')
+    
+    parser.add_argument('-r','--run',nargs='+',type=str,help=''+   
+    'hpl [<cfg>,<cfg>,...,<cfg>]\n'+     
+    '     Nummer -> Ausführung bestimmter hpl_cfg\n\n' +
+    '     all -> Ausführung aller hpl_cfg\n' +
+    'osu [<Test>] [<cfg>,<cfg>,...,<cfg>]\n'+
+    '     Tests:\n'+
+    '     latency\n' +
+    '     bw\n' +
+    '     bcast\n' +
+    '     barrier\n' +
+    '     allreduce\n'+    
+    '     Nummer -> Ausführung bestimmter hpl_cfg\n\n'+
+    '     all -> Ausführung aller osu_cfg\n') 
+    args= parser.parse_args()
+    if args.install:
+        if args.install=='all':
+            expr=''            
+            print('#TODO: Install all')
+            install_spec(expr)
+        else:
+            print(install_spec(args.install))
+            
+    if args.run:
+        if len(args.run)<2 or (len(args.run)<3 and args.run[0]=='osu'):
+            print('Zu wenig Argumente:\n'+
+            'HPL (2): -r [hpl] [cfg]\n'+
+            'OSU (3): -r [osu] [test] [cfg]')
+        elif args.run[0]=='hpl':
+            print('#TODO hpl-run')
+            #hpl_run(args.run[1])
+        elif args.run[0]=='osu':
+            print('#TODO osu-run')
+            #osu_run(args.run[1],args.run[2])
+            
+    if not args.install and not args.run:
+        menu()
+            
 
 
 """
@@ -109,8 +159,18 @@ def view_install_specs(name=0):
 #Prüft Installationsausdruck auf grobe Syntaxfehler
 def check_expr_syn(expr):
     expr_list=['@%','%@','^%','%^','^@','@^']
+    """
+    Hinweis bzgl. regulärem Ausdruck:
+    {min,max} min/max vorkommen der vorrangegangenen Zeichenkette 
+    \w Symbolmenge: [a-z, A-Z, 0-9, _]            
+    * Vorangegangene Zeichenkette kommt beliebig oft vor (inkl. 0 mal)
+    (...) Gruppe -> praktisch eine Zeichenkette
+    \. Punktsymbol, da einfach nur . für einzelnes Zeichen steht            
+    """
+    if re.search(r'@{1,1}(\w*\.*[%]{0,0}\w*)*@{1,}',expr):
+        return False
     for _ in expr_list:
-        r=expr.find(_)
+        r=expr.find(_)        
         if r != -1:
             print('Syntaxfehler an Position: '+str(r))
             return False
@@ -178,7 +238,10 @@ def install_spec(expr):
             expr=remove_installed_spec(expr)            
             if expr != '':
                 if (os.path.isfile('install.sh'))==False: 
-                    shell('touch install.sh')            
+                    shell('touch install.sh')
+                else:
+                    #Clear install.sh
+                    file_w('install.sh','',0)
                 s='#!/bin/bash\n' \
                     + '#SBATCH --nodes=1\n' \
                     +'#SBATCH --ntasks=1\n' \
@@ -187,11 +250,10 @@ def install_spec(expr):
                     +'#SBATCH --error=install.err\n' \
                     +'echo spack install ' \
                     + expr
-                #Achtung write besser vorher install.sh leeren
+                #Achtung write: besser vorher install.sh leeren
                 file_w('install.sh',' ','a')
                 file_w('install.sh',str(s),0)
-                #print(shell('cat install.sh'))
-                #shell('rm install.sh')
+                print(shell('cat install.sh'))               
                 return 'Installation läuft'
             else: 
                 return 'Bereits alles installiert!'
@@ -238,7 +300,7 @@ def menu():
         elif opt == '2' or opt == 'hpl':
             printmenu('Info: Noch nicht implementiert...')      
         elif opt == '3'or opt == 'osu':
-            printmenu('Info: Noch nicht implementiert...')
+            osu_menu()
         elif opt == '4':
             elist = ''
             while len(errorstack)!=0:
@@ -254,7 +316,34 @@ def menu():
             printmenu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')   
 
 
-
+def osu_menu():    
+    opt = -1
+    while True:
+        clear()
+        print('---OSU---')
+        print('(0) Back')
+        print('(1) Run')
+        print('(2) View install specs')
+        print('(3) Install')
+        print(' ')        
+        
+        if opt == -1:
+             opt = str(input_format())
+        if opt == '0' or opt == 'q':            
+            printmenu()
+            return True
+        elif opt == '1' or opt == 'run':            
+            print('Info: Noch nicht implementiert...')
+        elif opt == '2' or opt == 'specs':                        
+            print(view_install_specs('osu-micro-benchmarks'))
+        elif opt == '3' or opt == 'install':            
+            print("Bitte spec^spec^...^spec eingeben\n") 
+            print(' ')  
+            print(install_spec(str(input_format())))        
+        else:            
+            print('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')
+            clear()            
+        opt = str(input_format())
 """
 Allgemeine I/O Funktionen
 """
@@ -428,44 +517,10 @@ def hpl_run(id):
 Funktionen die OSU zuzuordnen sind
 """  
 
-#TODO: OSU-Menü kompatibel zum aktuellen machen
-"""
-def osu_menu(back,txt):    
-    print('---OSU---')
-    print('(0) Back')
-    print('(1) Run')
-    print('(2) View install specs')
-    print('(3) Install')
-    print(' ')        
-        
-    if back != 0:
-        print(str(txt))  
-
-    opt = str(input_format())    
-        
-    if opt == '0' or opt == 'q':
-        clear()
-        back = 0
-        menu()
-    elif opt == '1' or opt == 'run':
-        clear()
-        menu('Info: Noch nicht implementiert...','3')
-    elif opt == '2' or opt == 'specs':
-        clear()            
-        menu(view_install_specs('mvapich2'),'3')
-    elif opt == '3' or opt == 'install':
-        clear()
-        print("spec^spec^...^spec\n") 
-        print(' ')  
-        menu(install_spec(str(input_format())),'3')        
-    else:
-        clear()
-        menu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1','3')
-"""
 
 
 
 #Startpunkt
 clear()
 check()
-menu()
+cl_arg()
