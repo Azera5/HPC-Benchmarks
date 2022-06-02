@@ -2,7 +2,6 @@ import os
 import os.path
 import subprocess
 import datetime
-import math
 import inspect
 import time
 import fnmatch
@@ -10,10 +9,33 @@ import re
 import argparse
 from argparse import RawTextHelpFormatter
 
-hpl_cfg_pth = 'config/hpl/'
-osu_cfg_pth = 'config/osu/'
-spack_binary = '~/spack/bin/spack'
+
+
+"""
+Potentielle Usereingaben
+"""
+hpl_cfg_pth = ''
+osu_cfg_pth = ''
+spack_binary = ''
+
+
+
+"""
+Hilfsvariablen
+"""
+#Anzahl unterstützter Benchmarks (HPL, OSU, ...)
+benchcount = 2
+hpl_id = 1
+osu_id = 2
+#Sammelt kürzliche Fehlermeldungen
+
 errorstack = []
+#Trägt Informationen des Config-Ordners; Ersteintrag für Metadaten
+#Index: [Benchmark-id][Profil-Nr.][Abschnitt][Zeile im Abschnitt]
+cfg_profiles = [[]]*(benchcount+1)
+#Initialnachricht
+initm = ''
+
 
 """
 Command-Line-Parameter
@@ -62,6 +84,19 @@ def cl_arg():
         menu()
             
 
+#Abschnittsgrenzen der hpl Configs:
+hpl_cfg_abschnitt_1 = 11    # <=> Grundlagentechnologie
+hpl_cfg_abschnitt_2 = 41    # <=> HPL.dat
+hpl_cfg_abschnitt_3 = 50    # <=> SLURM
+
+
+#Abschnittsgrenzen der osu Configs:
+osu_cfg_abschnitt_1 = 7     # <=> Grundlagentechnologie
+osu_cfg_abschnitt_2 = 16    # <=> 
+osu_cfg_abschnitt_3 = 25    # <=> SLURM
+
+#Wieviele Benchmarktypen kennen wir?
+bench_count = 2
 
 """
 Debug- & Hilfs-Funktionen
@@ -82,12 +117,12 @@ def check_err_stack():
         return ''
 
 #Wertet einen Terminalbefehl aus
-def shell(cmd): 
+def shell(cmd):
     try:
         #Ausgabe soll nicht direkt auf's Terminal
         p = subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
         if(p.returncode!=0):
-            error_log('returncode ist nicht null!')
+            error_log('returncode der Eingabe \''+cmd+'\' war nicht null!')
         #.stdout liefert einen Binärstring desw. die Dekodierung
         return p.stdout.decode('UTF-8')
     except Exception as exc:
@@ -95,30 +130,70 @@ def shell(cmd):
 
 #Wertet einen Python-Ausdruck aus
 def code_eval(expr):
+    """
     try:
         return eval(expr)
     except Exception as exc:
         error_log(' {} [Exception]'.format(type(exc).__name__))
+    """
+    return eval(expr)
+
+#Ermittelt Pfade relevanter Verzeichnisse und Binaries, wenn nichts spezifiziert wurde
+def find_paths():
+    global hpl_cfg_pth, osu_cfg_pth, spack_binary   
+    #An der Stelle, an der das Programm ausgeführt wird, sollten auch die configs sein
+    if hpl_cfg_pth=='':
+        hpl_cfg_pth = str(shell('pwd')+'/config/hpl/').replace('\n','').strip()
+    if osu_cfg_pth=='':
+        osu_cfg_pth = str(shell('pwd')+'/config/osu/').replace('\n','').strip()
+    if spack_binary=='':
+        r_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()
+        #Wir nehmen die erstbeste spack Binary, wenn nichts per Hand spezifiziert wurde
+        spack_binary = r_list[0].strip()
+
+def check_data():
+    global cfg_profiles
+    #Für jeden Bench eine Liste, in jeder dieser Listen eine Liste pro Profil
+    """
+    _ = ['hpl:empty'*len(get_cfg_names(hpl_cfg_pth,'hpl'))]
+    cfg_profiles.append(_)
+    _ = ['osu:empty'*len(get_cfg_names(osu_cfg_pth,'osu'))]
+    cfg_profiles.append(_)
+    """
+    #Hinweis: ['test']*n <=> ['test, 'test', ...] vgl. ['test'*n] = ['testtesttest...']
+    for _ in range(0, len(get_cfg_names(hpl_cfg_pth,'hpl'))):
+        #Ein Subliste pro Metadatenblock und drei Abschnitten je Profil
+        cfg_profiles[1].append([[]]*4)
+    for _ in range(0, len(get_cfg_names(osu_cfg_pth,'osu'))):
+        cfg_profiles[2].append([[]]*3)
+    
 
 #Existieren überhaupt log.txt, config/hpl/, config/hpl/hpl_cfg_[d, 1, ..., n] etc.
-def check():
-    str = ''
+def check_dirs():
+    global initm
+    #Hinweis: '/dir1/dir2/.../'[:-1] <=> '/dir1/dir2/...'
     if os.path.isfile('log.txt')==False:     
         shell('touch log.txt')
-        str = str+'errorlog erstellt ...\n'
-    if os.path.isdir(hpl_cfg_pth)==False:     
-        shell('mkdir -p '+hpl_cfg_pth)
-        str = str+'Config-Verzeichnis für HPL erstellt ...\n'
+        initm = initm+'errorlog erstellt ...\n'
+    if os.path.isdir(hpl_cfg_pth[:-1])==False:     
+        shell('mkdir -p '+hpl_cfg_pth[:-1])
+        initm = initm+'Config-Verzeichnis für HPL erstellt ...\n'
+        #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
+    if os.path.isdir(osu_cfg_pth[:-1])==False:     
+        shell('mkdir -p '+osu_cfg_pth[:-1])
+        initm = initm+'Config-Verzeichnis für OSU erstellt ...\n'
         #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
     if os.path.isfile(hpl_cfg_pth+'hpl_cfg_d.txt')==False:     
         shell('touch '+hpl_cfg_pth+'hpl_cfg_d.txt')
-        str = str+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
-    #Wäre gut wenn man sehen könnte ob lokale spack Installation da ist oder nicht, vll auch mit Pfadangabe...
+        initm = initm+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
 
 #Liefert für eine Configzeile "123.4.5   [Parameter x]" nur die Zahl
 def config_cut(line):
-    line = line[:line.find("[")]
+    c = line.find("[")
+    if(c!=-1):
+        line = line[:c]
     return line.strip()
+
 
 #Ein Art Prompt für den Nutzer
 def input_format():
@@ -130,7 +205,7 @@ def clear():
     os.system('clear')
     #print('\n\n\n---Debugprint---\n\n\n')
 
-#Liefert Files, keine Verzeichnisse
+#Liefert Files, keine Verz.; Erwartet Pfade in der Form /dir1/dir2/.../
 def get_names(pth):
     r = os.listdir(pth)
     for _ in r:
@@ -141,6 +216,54 @@ def get_names(pth):
 #Liefert Textfiles eines bestimmten Typs (z.B. hpl_cfg_(...).txt)
 def get_cfg_names(pth, type):
     return fnmatch.filter(get_names(pth), type+'_cfg_*.txt')
+
+def config_out(bench_id):
+    s=''
+    for p in cfg_profiles[bench_id]:
+        #Metadaten
+        s += 'Profil: '+p[0][0]+'\n'
+        if (p[0][1]!='')and(p[0][2]!=''):
+            s += 'Configpfad: '+p[0][1]+'\n'
+            s += 'Zielpfad: '+p[0][2]+'\n'
+        #Abschnitte der Profile
+        for b in range(0,len(p)):
+            s += '->Block: '+str(b)+'\n'
+            #individuelle Lines des Blocks (=Strings) sind konkatenierbar
+            for l in p[b]:
+                if l=='':
+                    s += 'leer'+'\n'
+                else:
+                    s += l+'\n'
+    s += '\n-----------------------------\n'
+    return s
+
+def get_osu_cfg():
+    global cfg_profiles
+    names = get_cfg_names(osu_cfg_pth, 'osu')
+    sublist = []
+    #i-te Configzeile (int), p für Profil (string)
+    
+    for p in names:
+        #+1 damit auch die letzte Zeile ausgewertet wird
+        for i in range(1,osu_cfg_abschnitt_1+1):
+            sublist.append(config_cut(file_r(osu_cfg_pth+p,i)))
+        cfg_profiles[osu_id][names.index(p)][1] = sublist
+        sublist = []
+        #+4 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
+        for i in range(osu_cfg_abschnitt_1+4, osu_cfg_abschnitt_2+1):
+            sublist.append(config_cut(file_r(osu_cfg_pth+p,i)))
+        cfg_profiles[osu_id][names.index(p)][2] = sublist
+        sublist = []
+        #+2 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
+        for i in range(osu_cfg_abschnitt_2+2, osu_cfg_abschnitt_3+1):
+            sublist.append(config_cut(file_r(osu_cfg_pth+p,i)))
+        sublist = []
+        cfg_profiles[osu_id][names.index(p)][3] = sublist
+        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat
+        cfg_profiles[osu_id][names.index(p)][0] = p
+        print('...')
+
+
 
 """
 Installation
@@ -262,6 +385,7 @@ def install_spec(expr):
             return 'Kann nicht installiert werden!'
 
 
+
 """
 Menüfunktionen
 """
@@ -285,7 +409,7 @@ def menu():
     global errorstack
  
     #Damit man die Optionen sehen kann
-    printmenu()
+    printmenu(initm)
     
     #Interaktivität mit Nutzereingabe
     while True:
@@ -390,51 +514,64 @@ def file_w(name, txt, pos):
 Funktionen die HPL zuzuordnen sind
 """
 
-#Zu entfernen sobald die fortgeschritteneren Funktionen fertig sind
-"""
-#Passende Index-Grenzen für die Config setzen <--- TODO
-def get_hpl_spec(pth):
-    symb = ['@', '%', '@', '^', '@', '%', '@', '^', '@', '%', '@']
-    spec = 'hpl'
-    #Cofig-Zeile ab 1 aber Symbol-Liste ab 0, desw. der Index-Offeset
-    for _ in range(0,11):
-        symb[_] = symb[_]+config_cut(file_r(pth,(_+1)))
-        #Nur anhängen, wenn auch was in der Config stand
-        #Vorsicht: Es müsste noch geprüft werden ob vor einem @blabla überhaupt etwas steht!
-        if len(symb[_])>2:
-            spec = spec+symb[_]
-    print('DBG --- get_hpl_spec(pth) ermittelt:'+spec)
-    return spec
-"""
-
 #Bekommt eine Liste bzgl. der Packages aus einer Config, liefert die package spec
-def get_hpl_spec(cfg_list):
+def get_hpl_spec(cfg_list): 
+    #Syntax bilden
     symb = ['@', '%', '@', '^', '@', '%', '@', '^', '@', '%', '@']
     spec = 'hpl'
-    #Cofig-Zeile ab 1 aber Symbol-Liste ab 0, desw. der Index-Offeset
     for _ in range(0,11):
-        symb[_] = symb[_]+config_cut(cfg_l[1][_+1])
+        symb[_] = symb[_]+cfg_list[_] #config_cut(cfg_list[_])
         #Nur anhängen, wenn auch was in der Config stand
         #Vorsicht: Es müsste noch geprüft werden ob vor einem @blabla überhaupt etwas steht!
         if len(symb[_])>2:
             spec = spec+symb[_]
-    print('DBG --- get_hpl_spec(pth) ermittelt:'+spec)
+    #print('DBG --- get_hpl_spec(pth) ermittelt:'+spec)
     return spec
 
-def get_cfg(pth):
-    return 'noch nicht implementiert...'
-    #TODO: get_cfg_names sollte getestet sein...
-    #return cfg_list
+def get_hpl_target_path(spec):
+    if(spec.find('^')==-1):
+        pth = shell(spack_binary+' find --paths '+spec)
+    else:
+        pth = shell(spack_binary+' find --paths '+spec[:spec.find('^')])
+    _ = pth.find('/home')
+    return ((pth[_:]).strip()+'/bin')
 
-#Hier soll HPL.dat dem Profil entsprechend justiert werden
+#Braucht einen Pfad zum 
+def get_hpl_cfg():
+    global cfg_profiles
+    names = get_cfg_names(hpl_cfg_pth, 'hpl')
+    sublist = []
+    #i-te Configzeile (int), p für Profil (string)
+    for p in names:
+        #+1 damit auch die letzte Zeile ausgewertet wird
+        for i in range(1,hpl_cfg_abschnitt_1+1):
+            sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))
+        cfg_profiles[hpl_id][names.index(p)][1] = sublist
+        sublist = []
+        #+2 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
+        for i in range(hpl_cfg_abschnitt_1+2, hpl_cfg_abschnitt_2+1):
+            sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))
+        cfg_profiles[hpl_id][names.index(p)][2] = sublist
+        sublist = []
+        #+2 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
+        for i in range(hpl_cfg_abschnitt_2+2, hpl_cfg_abschnitt_3+1):
+            sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))
+        sublist = []
+        cfg_profiles[hpl_id][names.index(p)][3] = sublist
+        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat
+        spec = get_hpl_spec(cfg_profiles[hpl_id][names.index(p)][1])
+        cfg_profiles[hpl_id][names.index(p)][0] = [p, hpl_cfg_pth+p, get_hpl_target_path(spec), spec]
+        print('...')
+
+#Funktion schreibt HPL-Abschnitt aus dem Config-Profil in eine HPL.dat (beide Pfade notwendig)
 def set_data_hpl(cfg, pth):
-    print('DBG: set_data_hpl hat die File gefunden -> '+str(os.path.isfile(pth+'/HPL.dat')))
+    print('DBG: set_data_hpl hat die File gefunden -> '+str(os.path.isfile(pth+'HPL.dat')))
     #Überschreiben mit Offeset (erst ab Index 13 geht der HPL Abschnitt in der Config los)
     #Auskommentiert bis Schreibfunktion gefixt ist <--- TODO
     """
-    if (os.path.isfile(pth+'/HPL.dat'))==True:
+    if (os.path.isfile(pth+'HPL.dat'))==True:
         for _ in range(2,30):
-            file_w(pth+'/HPL.dat',file_r(cfg,_+11),_)
+            file_w(pth+'HPL.dat',file_r(cfg,_+11),_)
     """
 
 #Hiermit soll das Skript gebaut werden
@@ -522,5 +659,10 @@ Funktionen die OSU zuzuordnen sind
 
 #Startpunkt
 clear()
-check()
+print('laden ...')
+find_paths()
+check_data()
+check_dirs()
+get_hpl_cfg()
+get_osu_cfg()
 cl_arg()
