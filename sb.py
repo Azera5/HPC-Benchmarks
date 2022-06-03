@@ -41,30 +41,35 @@ initm = ''
 Command-Line-Parameter
 """
 def cl_arg():
-    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
-    parser.add_argument('-i','--install',type=str,help=''+
-    'all: Installiert alle specs aus Install-config\n' +
-    'spec -> Installiert bestimmte spec\n\n')
+    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)    
+    parser.add_argument('-i','--install',nargs='+',type=str,help=''+
+    '<Benchmark> <cfg>,<cfg>,...,<cfg>\n'+
+    '     z.B.: -i hpl 1,3-4,Test1\n'+
+    'Alternativ: <spec>\n'+
+    '     z.B.: -i hpl@2.3%%gcc@12.1.0^openblas@0.3.20\n'+
+    'all: Installiert alle Benchmarks/cfg\n' +
+    '     z.B.: -i all all\n\n')
     
     parser.add_argument('-r','--run',nargs='+',type=str,help=''+   
-    'hpl [<cfg>,<cfg>,...,<cfg>]\n'+     
-    '     Nummer -> Ausführung bestimmter hpl_cfg\n\n' +
-    '     all -> Ausführung aller hpl_cfg\n' +
-    'osu [<Test>] [<cfg>,<cfg>,...,<cfg>]\n'+
-    '     Tests:\n'+
-    '     latency\n' +
-    '     bw\n' +
-    '     bcast\n' +
-    '     barrier\n' +
-    '     allreduce\n'+    
-    '     Nummer -> Ausführung bestimmter hpl_cfg\n\n'+
-    '     all -> Ausführung aller osu_cfg\n') 
+    'hpl <cfg>,<cfg>,...,<cfg>\n'+     
+    '     z.B.: -r hpl 1,3-4,Test1\n' +
+    '           -r hpl all <=> -r hpl\n\n' +
+    'osu <Test> <cfg>,<cfg>,...,<cfg>\n'+
+    '     Tests:{latency, bw, bcast, barrier, allreduce}\n'+
+    '     z.B.: -r osu latency 1,3-4,Test1\n'+
+    '           -r osu latency all <=> -r osu latency\n') 
+    
+   
     args= parser.parse_args()
     if args.install:
-        if args.install=='all':
+        if args.install[0]=='all':
             expr=''            
-            print('#TODO: Install all')
+            print('#TODO: Install all Benchmarks')
             install_spec(expr)
+        elif args.install[0]=='hpl':
+            print('#TODO: Install HPL')
+        elif args.install[0]=='osu':
+            print('#TODO: Install OSU')
         else:
             print(install_spec(args.install))
             
@@ -80,6 +85,14 @@ def cl_arg():
             print('#TODO osu-run')
             #osu_run(args.run[1],args.run[2])
             
+    
+    print('laden ...')
+    find_paths()
+    check_data()
+    check_dirs()
+    get_hpl_cfg()
+    get_osu_cfg()
+        
     if not args.install and not args.run:
         menu()
             
@@ -240,15 +253,19 @@ def config_out(bench_id):
 def get_osu_cfg():
     global cfg_profiles
     names = get_cfg_names(osu_cfg_pth, 'osu')
-    sublist = []
+    sublist = []    
+    spec_ = [] #Hilfsvariable zum Ermitteln des specs
     #i-te Configzeile (int), p für Profil (string)
     
     for p in names:
         #+1 damit auch die letzte Zeile ausgewertet wird
         for i in range(1,osu_cfg_abschnitt_1+1):
             sublist.append(config_cut(file_r(osu_cfg_pth+p,i)))
+            spec_.append(file_r(osu_cfg_pth+p,i)) #get_spec benötigt die ganze Zeile der config
         cfg_profiles[osu_id][names.index(p)][1] = sublist
         sublist = []
+        spec = get_spec(spec_,'osu-micro-benchmarks')
+        spec_ = []
         #+4 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
         for i in range(osu_cfg_abschnitt_1+4, osu_cfg_abschnitt_2+1):
             sublist.append(config_cut(file_r(osu_cfg_pth+p,i)))
@@ -259,8 +276,8 @@ def get_osu_cfg():
             sublist.append(config_cut(file_r(osu_cfg_pth+p,i)))
         sublist = []
         cfg_profiles[osu_id][names.index(p)][3] = sublist
-        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat
-        cfg_profiles[osu_id][names.index(p)][0] = p
+        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat        
+        cfg_profiles[osu_id][names.index(p)][0] = [p,spec]
         print('...')
 
 
@@ -366,7 +383,7 @@ def install_spec(expr):
                     #Clear install.sh
                     file_w('install.sh','',0)
                 s='#!/bin/bash\n' \
-                    + '#SBATCH --nodes=1\n' \
+                    +'#SBATCH --nodes=1\n' \
                     +'#SBATCH --ntasks=1\n' \
                     +'#SBATCH --partition=vl-parcio\n' \
                     +'#SBATCH --output=install.out\n' \
@@ -389,7 +406,6 @@ def install_spec(expr):
 """
 Menüfunktionen
 """
-
 def printmenu(txt = ''):
     clear()
     print('---Menü---')
@@ -439,7 +455,7 @@ def menu():
         else:
             printmenu('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')   
 
-
+#OSU-Menu
 def osu_menu():    
     opt = -1
     while True:
@@ -515,19 +531,21 @@ Funktionen die HPL zuzuordnen sind
 """
 
 #Bekommt eine Liste bzgl. der Packages aus einer Config, liefert die package spec
-def get_hpl_spec(cfg_list): 
-    #Syntax bilden
-    symb = ['@', '%', '@', '^', '@', '%', '@', '^', '@', '%', '@']
-    spec = 'hpl'
-    for _ in range(0,11):
-        symb[_] = symb[_]+cfg_list[_] #config_cut(cfg_list[_])
-        #Nur anhängen, wenn auch was in der Config stand
-        #Vorsicht: Es müsste noch geprüft werden ob vor einem @blabla überhaupt etwas steht!
-        if len(symb[_])>2:
-            spec = spec+symb[_]
-    #print('DBG --- get_hpl_spec(pth) ermittelt:'+spec)
+def get_spec(cfg_list,bench):     
+    spec = bench    
+    for _ in cfg_list:      
+        _ = _.split('[')
+        if len(_[0]) > 0:
+            _[0]=_[0].rstrip()            
+            if _[1].find('Version')!=-1:
+                spec = spec+'@'
+            elif _[1].find('Compiler')!=-1:
+                spec = spec+'%'
+            else:
+                spec=spec+'^'                
+            spec=spec+_[0] 
     return spec
-
+ 
 def get_hpl_target_path(spec):
     if(spec.find('^')==-1):
         pth = shell(spack_binary+' find --paths '+spec)
@@ -541,13 +559,17 @@ def get_hpl_cfg():
     global cfg_profiles
     names = get_cfg_names(hpl_cfg_pth, 'hpl')
     sublist = []
+    spec_ = [] #Hilfsvariable zum Ermitteln des specs
     #i-te Configzeile (int), p für Profil (string)
     for p in names:
         #+1 damit auch die letzte Zeile ausgewertet wird
         for i in range(1,hpl_cfg_abschnitt_1+1):
             sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))
+            spec_.append(file_r(hpl_cfg_pth+p,i)) #get_spec benötigt die ganze Zeile der config           
         cfg_profiles[hpl_id][names.index(p)][1] = sublist
         sublist = []
+        spec = get_spec(spec_,'hpl')
+        spec_ = []
         #+2 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
         for i in range(hpl_cfg_abschnitt_1+2, hpl_cfg_abschnitt_2+1):
             sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))
@@ -555,11 +577,10 @@ def get_hpl_cfg():
         sublist = []
         #+2 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
         for i in range(hpl_cfg_abschnitt_2+2, hpl_cfg_abschnitt_3+1):
-            sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))
+            sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))            
         sublist = []
         cfg_profiles[hpl_id][names.index(p)][3] = sublist
-        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat
-        spec = get_hpl_spec(cfg_profiles[hpl_id][names.index(p)][1])
+        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat        
         cfg_profiles[hpl_id][names.index(p)][0] = [p, hpl_cfg_pth+p, get_hpl_target_path(spec), spec]
         print('...')
 
@@ -613,7 +634,7 @@ def hpl_run(id):
     cfg = hpl_cfg_pth+'hpl_cfg_{}.txt'.format(str(id))
     
     #Was ist das spec?
-    spec = get_hpl_spec(cfg)
+    spec = get_spec(cfg,'hpl')
     _ = spec.find('^')
     spec_short = (spec[:_]).strip()
     
@@ -734,10 +755,4 @@ Funktionen die OSU zuzuordnen sind
 
 #Startpunkt
 clear()
-print('laden ...')
-find_paths()
-check_data()
-check_dirs()
-get_hpl_cfg()
-get_osu_cfg()
 cl_arg()
