@@ -36,6 +36,9 @@ cfg_profiles = [[]]*(benchcount+1)
 #Initialnachricht
 initm = ''
 
+#Wieviele Benchmarktypen kennen wir?
+bench_count = 2
+
 
 """
 Command-Line-Parameter
@@ -90,26 +93,12 @@ def cl_arg():
     find_paths()
     check_data()
     check_dirs()
-    get_hpl_cfg()
-    get_osu_cfg()
+    get_cfg('hpl')
+    get_cfg('osu')
         
     if not args.install and not args.run:
         menu()
-            
 
-#Abschnittsgrenzen der hpl Configs:
-hpl_cfg_abschnitt_1 = 11    # <=> Grundlagentechnologie
-hpl_cfg_abschnitt_2 = 41    # <=> HPL.dat
-hpl_cfg_abschnitt_3 = 50    # <=> SLURM
-
-
-#Abschnittsgrenzen der osu Configs:
-osu_cfg_abschnitt_1 = 7     # <=> Grundlagentechnologie
-osu_cfg_abschnitt_2 = 16    # <=> 
-osu_cfg_abschnitt_3 = 25    # <=> SLURM
-
-#Wieviele Benchmarktypen kennen wir?
-bench_count = 2
 
 """
 Debug- & Hilfs-Funktionen
@@ -250,36 +239,32 @@ def config_out(bench_id):
     s += '\n-----------------------------\n'
     return s
 
-def get_osu_cfg():
-    global cfg_profiles
-    names = get_cfg_names(osu_cfg_pth, 'osu')
-    sublist = []    
-    spec_ = [] #Hilfsvariable zum Ermitteln des specs
-    #i-te Configzeile (int), p für Profil (string)
-    
-    for p in names:
-        #+1 damit auch die letzte Zeile ausgewertet wird
-        for i in range(1,osu_cfg_abschnitt_1+1):
-            sublist.append(config_cut(file_r(osu_cfg_pth+p,i)))
-            spec_.append(file_r(osu_cfg_pth+p,i)) #get_spec benötigt die ganze Zeile der config
-        cfg_profiles[osu_id][names.index(p)][1] = sublist
-        sublist = []
-        spec = get_spec(spec_,'osu-micro-benchmarks')
-        spec_ = []
-        #+4 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
-        for i in range(osu_cfg_abschnitt_1+4, osu_cfg_abschnitt_2+1):
-            sublist.append(config_cut(file_r(osu_cfg_pth+p,i)))
-        cfg_profiles[osu_id][names.index(p)][2] = sublist
-        sublist = []
-        #+2 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
-        for i in range(osu_cfg_abschnitt_2+2, osu_cfg_abschnitt_3+1):
-            sublist.append(config_cut(file_r(osu_cfg_pth+p,i)))
-        sublist = []
-        cfg_profiles[osu_id][names.index(p)][3] = sublist
-        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat        
-        cfg_profiles[osu_id][names.index(p)][0] = [p,spec]
-        print('...')
+#Benchmark-ID
+def get_bench_id(bench):
+    if bench is 'hpl':
+        return hpl_id
+    elif bench is 'osu':
+        return osu_id
+    else:
+        return -1
 
+#Configpfad
+def get_cfg_path(bench):
+    if bench is 'hpl':
+        return hpl_cfg_pth
+    if bench is 'osu':
+        return osu_cfg_pth
+    else:
+        return -1 
+
+#Zielpfad zu Binary&HPL.dat
+def get_target_path(spec):
+    if(spec.find('^')==-1):
+        pth = shell(spack_binary+' find --paths '+spec)
+    else:
+        pth = shell(spack_binary+' find --paths '+spec[:spec.find('^')])
+    _ = pth.find('/home')
+    return ((pth[_:]).strip()+'/bin')
 
 
 """
@@ -402,7 +387,6 @@ def install_spec(expr):
             return 'Kann nicht installiert werden!'
 
 
-
 """
 Menüfunktionen
 """
@@ -497,6 +481,11 @@ def file_r(name, pos):
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__))
 
+def count_line(name):
+     with open (name, 'r') as f:
+        num_lines = sum(1 for line in f if line.rstrip())
+        return num_lines
+
 #Schreibfunktion: In welche Datei? Welchen Text? An welche Position? bzw. 'a' für anhängen/append
 def file_w(name, txt, pos):
     try:
@@ -526,12 +515,11 @@ def file_w(name, txt, pos):
 
 
 
-"""
-Funktionen die HPL zuzuordnen sind
-"""
 
 #Bekommt eine Liste bzgl. der Packages aus einer Config, liefert die package spec
-def get_spec(cfg_list,bench):     
+def get_spec(cfg_list,bench):
+    if bench is 'osu':
+        bench='osu-micro-benchmarks'
     spec = bench    
     for _ in cfg_list:      
         _ = _.split('[')
@@ -545,45 +533,40 @@ def get_spec(cfg_list,bench):
                 spec=spec+'^'                
             spec=spec+_[0] 
     return spec
- 
-def get_hpl_target_path(spec):
-    if(spec.find('^')==-1):
-        pth = shell(spack_binary+' find --paths '+spec)
-    else:
-        pth = shell(spack_binary+' find --paths '+spec[:spec.find('^')])
-    _ = pth.find('/home')
-    return ((pth[_:]).strip()+'/bin')
 
 #Braucht einen Pfad zum 
-def get_hpl_cfg():
+def get_cfg(bench):
     global cfg_profiles
-    names = get_cfg_names(hpl_cfg_pth, 'hpl')
+    names = get_cfg_names(get_cfg_path(bench), bench)
     sublist = []
-    spec_ = [] #Hilfsvariable zum Ermitteln des specs
-    #i-te Configzeile (int), p für Profil (string)
-    for p in names:
-        #+1 damit auch die letzte Zeile ausgewertet wird
-        for i in range(1,hpl_cfg_abschnitt_1+1):
-            sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))
-            spec_.append(file_r(hpl_cfg_pth+p,i)) #get_spec benötigt die ganze Zeile der config           
-        cfg_profiles[hpl_id][names.index(p)][1] = sublist
-        sublist = []
-        spec = get_spec(spec_,'hpl')
-        spec_ = []
-        #+2 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
-        for i in range(hpl_cfg_abschnitt_1+2, hpl_cfg_abschnitt_2+1):
-            sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))
-        cfg_profiles[hpl_id][names.index(p)][2] = sublist
-        sublist = []
-        #+2 zum Überspringen der Trennzeilen; +1 damit auch die letzte Zeile ausgewertet wird
-        for i in range(hpl_cfg_abschnitt_2+2, hpl_cfg_abschnitt_3+1):
-            sublist.append(config_cut(file_r(hpl_cfg_pth+p,i)))            
-        sublist = []
-        cfg_profiles[hpl_id][names.index(p)][3] = sublist
+    spec_ = [] #Hilfsvariable zum Ermitteln des specs    
+    id = get_bench_id(bench)    
+    #l-te Configzeile (int), p für Profil (string)
+    for p in names: 
+        abschnitt = 1
+        l = 1
+        for l in range(l,count_line(get_cfg_path(bench)+'/'+p)):            
+            line = file_r(get_cfg_path(bench)+p,l)            
+            if line.find('------')==-1 and len(config_cut(line))>0:                
+                sublist.append(config_cut(line))
+                if abschnitt==1:                    
+                    spec_.append(line) #get_spec benötigt die ganze Zeile der config                
+            elif len(sublist)>0:
+                cfg_profiles[id][names.index(p)][abschnitt] = sublist
+                if abschnitt==1:
+                    spec = get_spec(spec_,bench)
+                    spec_ = []
+                abschnitt = abschnitt+1
+                sublist = []
         #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat        
-        cfg_profiles[hpl_id][names.index(p)][0] = [p, hpl_cfg_pth+p, get_hpl_target_path(spec), spec]
-        print('...')
+        cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]
+        print('...')        
+        
 
+"""
+Funktionen die HPL zuzuordnen sind
+"""
+ 
 #Funktion schreibt HPL-Abschnitt aus dem Config-Profil in eine HPL.dat (beide Pfade notwendig)
 def set_data_hpl(cfg, pth):
     print('DBG: set_data_hpl hat die File gefunden -> '+str(os.path.isfile(pth+'HPL.dat')))
