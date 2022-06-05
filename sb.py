@@ -27,17 +27,14 @@ Hilfsvariablen
 benchcount = 2
 hpl_id = 1
 osu_id = 2
-#Sammelt kürzliche Fehlermeldungen
 
+#Sammelt kürzliche Fehlermeldungen
 errorstack = []
 #Trägt Informationen des Config-Ordners; Ersteintrag für Metadaten
 #Index: [Benchmark-id][Profil-Nr.][Abschnitt][Zeile im Abschnitt]
-cfg_profiles = [[]]*(benchcount+1)
+cfg_profiles = [[],[],[],[]]
 #Initialnachricht
 initm = ''
-
-#Wieviele Benchmarktypen kennen wir?
-bench_count = 2
 
 
 """
@@ -46,12 +43,11 @@ Command-Line-Parameter
 def cl_arg():
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)    
     parser.add_argument('-i','--install',nargs='+',type=str,help=''+
-    '<Benchmark> <cfg>,<cfg>,...,<cfg>\n'+
-    '     z.B.: -i hpl 1,3-4,Test1\n'+
-    'Alternativ: <spec>\n'+
-    '     z.B.: -i hpl@2.3%%gcc@12.1.0^openblas@0.3.20\n'+
+    '<Benchmark> <cfg>,<cfg>,...,<cfg> <Partition>\n'+
+    '     z.B.: -i hpl 1,3-4,Test1 partition\n'+
     'all: Installiert alle Benchmarks/cfg\n' +
-    '     z.B.: -i all all\n\n')
+    '     z.B.: -i all partition\n\n' +
+    '           -i osu all partition')
     
     parser.add_argument('-r','--run',nargs='+',type=str,help=''+   
     'hpl <cfg>,<cfg>,...,<cfg>\n'+     
@@ -61,21 +57,39 @@ def cl_arg():
     '     Tests:{latency, bw, bcast, barrier, allreduce}\n'+
     '     z.B.: -r osu latency 1,3-4,Test1\n'+
     '           -r osu latency all <=> -r osu latency\n') 
-    
+ 
+    print('laden ...')
+    find_paths()
+    check_data()
+    check_dirs()
+    get_cfg('osu')
+    get_cfg('hpl')  
    
     args= parser.parse_args()
+    
+    #Install Benchmarks
     if args.install:
+        if len(args.install)<2:
+            return print('zu wenig Argumente')
+        expr=[]
+        #Alle Profile aller Benchmarks werden installiert
         if args.install[0]=='all':
-            expr=''            
-            print('#TODO: Install all Benchmarks')
-            install_spec(expr)
-        elif args.install[0]=='hpl':
-            print('#TODO: Install HPL')
-        elif args.install[0]=='osu':
-            print('#TODO: Install OSU')
-        else:
-            print(install_spec(args.install))
-            
+            expr=get_all_specs('hpl')+get_all_specs('osu')
+        
+        #Nur bestimmte Benchmarks werden installiert
+        else:           
+            #Nur bestimmte Profile werden installiert
+            if len(args.install)>2 and args.install[1]!= 'all':
+                names=farg_to_list(args.install[1],args.install[0])
+                for _ in names:                   
+                    expr=get_all_specs(args.install[0],names)
+            #Alle Profile werden installiert
+            else:
+                expr=get_all_specs(args.install[0])
+                
+        install_spec(expr,args.install[len(args.install)-1])
+    
+    #Run Benchmarks
     if args.run:
         if len(args.run)<2 or (len(args.run)<3 and args.run[0]=='osu'):
             print('Zu wenig Argumente:\n'+
@@ -86,16 +100,10 @@ def cl_arg():
             #hpl_run(args.run[1])
         elif args.run[0]=='osu':
             print('#TODO osu-run')
-            #osu_run(args.run[1],args.run[2])
-            
+            #osu_run(args.run[1],args.run[2])           
     
-    print('laden ...')
-    find_paths()
-    check_data()
-    check_dirs()
-    get_cfg('hpl')
-    get_cfg('osu')
-        
+     
+    #Start via Menu   
     if not args.install and not args.run:
         menu()
 
@@ -239,14 +247,16 @@ def config_out(bench_id):
     s += '\n-----------------------------\n'
     return s
 
-#Benchmark-ID
-def get_bench_id(bench):
-    if bench is 'hpl':
-        return hpl_id
-    elif bench is 'osu':
-        return osu_id
-    else:
-        return -1
+#Switcht Bench-ID/Tag
+def tag_id_switcher(bench):
+    switcher={
+        '1': 'hpl',
+        '2': 'osu',
+      
+        'hpl': hpl_id,
+        'osu': osu_id
+    }
+    return switcher.get(str(bench))  
 
 #Configpfad
 def get_cfg_path(bench):
@@ -319,25 +329,28 @@ def check_spec(name,version=-1):
 #Prüft ob Installationsausdruck gültig ist (alle Specs)
 def check_expr(expr):
     if check_expr_syn(expr):
-        arr = expr.split('^')              
+        arr = expr.split('^')        
         for spec in arr:
             s=spec.split('%')            
-            if s[0][:0]=='@':
-                #print('Name fehlt!')
-                #Package Name fehlt
-                return False
-               
-            s=spec.split('@')
-            if len(s) > 1:                    
-                if not check_spec(s[0],s[1]):                   
-                    #print(s[0]+'@'+s[1]+' existiert nicht')
-                    #Version existiert nicht
-                    return False
-            else:
-                if not check_spec(s[0]):
-                    #Package existiert nicht
-                    #print(s[0]+' existiert nicht')
-                    return False
+            
+            #Untersuchung von einzelnem Package und Version
+            for _ in s:            
+                if _[0][:0]=='@':
+                    #print('Name fehlt!')
+                    #Package Name fehlt
+                    return False               
+                
+                _=_.split('@')                
+                if len(_) > 1:
+                    if not check_spec(_[0],_[1]):                   
+                        error_log(_[0]+'@'+_[1]+' existiert nicht')
+                        #Version existiert nicht
+                        return False
+                else:
+                    if not check_spec(_[0]):
+                        #Package existiert nicht
+                        error_log(_[0]+' existiert nicht')
+                        return False
        
         return True
     #Syntaxfehler im Ausdruck
@@ -345,46 +358,94 @@ def check_expr(expr):
 
 #Entfernt bereits installierte specs aus Installationsausdruck
 def remove_installed_spec(expr):
-    arr=expr.split('^')
+    arr=expr.split('^')    
     all_specs=view_install_specs()
     out=''
     for _ in arr:        
-        if all_specs.find(_)==-1:
+        if all_specs.find(_)==-1 and out.find(_)==-1:
             out=out+'^'+_
     if out!='':        
         return out[1:]
     else:
         return out
-    
+
+#Entfernt redundante Specs, erhält eine Liste aus [spec^spec^...^spec][...] Ausdrücken
+def remove_redudant_specs(expr):
+    spec_list=[]    
+    for list in expr:
+        for _ in list.split('^'):
+            insert=True
+            for spec_ in spec_list:
+                if _ in spec_:
+                    insert=False
+            if insert:
+                spec_list.append('^'+_)
+            
+    for _ in spec_list:
+        spec_list[spec_list.index(_)]=_[1:]    
+    return spec_list
+        
+        
+        
 #Schreibt Script zum installieren der specs 
 #TODO: Auslagern der Slurmparameter                    
-def install_spec(expr):
-        if check_expr(expr):
-            expr=remove_installed_spec(expr)            
-            if expr != '':
-                if (os.path.isfile('install.sh'))==False: 
-                    shell('touch install.sh')
-                else:
-                    #Clear install.sh
-                    file_w('install.sh','',0)
-                s='#!/bin/bash\n' \
-                    +'#SBATCH --nodes=1\n' \
-                    +'#SBATCH --ntasks=1\n' \
-                    +'#SBATCH --partition=vl-parcio\n' \
-                    +'#SBATCH --output=install.out\n' \
-                    +'#SBATCH --error=install.err\n' \
-                    +'echo spack install ' \
-                    + expr
-                #Achtung write: besser vorher install.sh leeren
-                file_w('install.sh',' ','a')
-                file_w('install.sh',str(s),0)
-                print(shell('cat install.sh'))               
-                return 'Installation läuft'
-            else: 
-                return 'Bereits alles installiert!'
+def install_spec(expr,partition):
+    #Entfernt unnötig redundate Specs
+    expr=remove_redudant_specs(expr)
+    
+    #Check ob angegebene Partition existiert
+    if shell('sinfo -h -p '+partition).find(partition)==-1:
+        print('Partition: '+partition+' existiert nicht')
+        return error_log('Partition: '+partition+' existiert nicht')  
+    
+    slurm=''
+    specs=''
+    #Holt sich max. CPU Anzahl der Partition
+    cpus=shell('sinfo -h -p '+partition+' -o "%c"').split('+')[0]
+    #Falls install.sh nicht existiert wird es erstellt und Ausführbar gemacht
+    if (os.path.isfile('install.sh'))==False: 
+            shell('touch install.sh')
+            shell('chmod +x install.sh')
+            file_w('install.sh','','a')
+    else:
+        #Clear install.sh
+        shell('echo a > install.sh')    
+    
+    #Slurmparameter für die Installation
+    slurm='#!/bin/bash\n' \
+    +'#SBATCH --nodes=1\n' \
+    +'#SBATCH --ntasks=1\n' \
+    +'#SBATCH --cpus-per-task='+cpus \
+    +'#SBATCH --partition='+partition+'\n' \
+    +'#SBATCH --output=install.out\n' \
+    +'#SBATCH --error=install.err\n\n' \
+    +'srun . ~/spack/share/spack/setup-env'    
+    file_w('install.sh',slurm,0)    
+    
+    for e in expr:
+        if check_expr(e):
+            e=remove_installed_spec(e)            
+            if e != '':                    
+                specs=specs+'srun spack install '+e+'\n'                 
+            else:                
+                error_log(e+': Bereits installiert')
                 
         else:
-            return 'Kann nicht installiert werden!'
+            print('Installation abgebrochen: '+e+' existiert nicht!')
+            return error_log('Installation abgebrochen: '+e+' existiert nicht!')
+            
+    if specs is not '':
+        file_w('install.sh',str(specs),'a')
+        user=shell('echo $USER')
+        info = shell('squeue -u '+user)
+        error_log(info)
+        shell('sbatch install.sh')
+        time.sleep(0.5)
+        print('Installation läuft:\n'+info)
+                
+    else:
+        return print('Bereits alles installiert!')
+         
 
 
 """
@@ -534,39 +595,46 @@ def get_spec(cfg_list,bench):
             spec=spec+_[0] 
     return spec
 
+#Liefert alle Specs einer Config-Liste bzw. eines Benchmarktyps
+def get_all_specs(bench,cfgs='all'):
+    expr=[]
+    for s in cfg_profiles[tag_id_switcher(bench)]:
+        if cfgs=='all' or s[0][0] in cfgs:
+            expr.append(s[0][3])    
+    return expr
+
 #Braucht einen Pfad zum 
 def get_cfg(bench):
     global cfg_profiles
     names = get_cfg_names(get_cfg_path(bench), bench)
     sublist = []
     spec_ = [] #Hilfsvariable zum Ermitteln des specs    
-    id = get_bench_id(bench)    
+    id = tag_id_switcher(bench)    
     #l-te Configzeile (int), p für Profil (string)
     for p in names: 
         abschnitt = 1
-        l = 1
-        for l in range(l,count_line(get_cfg_path(bench)+'/'+p)):            
-            line = file_r(get_cfg_path(bench)+p,l)            
-            if line.find('------')==-1 and len(config_cut(line))>0:                
+        line_=1
+        for line_ in range(line_,count_line(get_cfg_path(bench)+'/'+p)):            
+            line = file_r(get_cfg_path(bench)+p,line_)            
+            if line.find('------')==-1:                
                 sublist.append(config_cut(line))
                 if abschnitt==1:                    
                     spec_.append(line) #get_spec benötigt die ganze Zeile der config                
-            elif len(sublist)>0:
-                cfg_profiles[id][names.index(p)][abschnitt] = sublist
+            elif len(sublist)>0:                
+                cfg_profiles[id][names.index(p)][abschnitt] = sublist                
                 if abschnitt==1:
                     spec = get_spec(spec_,bench)
                     spec_ = []
                 abschnitt = abschnitt+1
                 sublist = []
-        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat        
+        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat
         cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]
-        print('...')        
-        
-
+        print('...')  
 """
 Funktionen die HPL zuzuordnen sind
 """
- 
+
+        
 #Funktion schreibt HPL-Abschnitt aus dem Config-Profil in eine HPL.dat (beide Pfade notwendig)
 def set_data_hpl(cfg, pth):
     print('DBG: set_data_hpl hat die File gefunden -> '+str(os.path.isfile(pth+'HPL.dat')))
@@ -677,7 +745,7 @@ def farg_to_list(farg, bench):
             #Eintrag abgearbeitet
             del names[names.index(e)]
     for e in names:
-        print('farg-to-list:'+str(names[names.index(e)]))
+        #print('farg-to-list:'+str(names[names.index(e)]))
         names[names.index(e)] = bench+'_cfg_'+str(e)+'.txt'
     return names
     
@@ -731,9 +799,15 @@ def hpl_run(farg = 'all'):
 
 """
 Funktionen die OSU zuzuordnen sind
-"""  
-
-
+""" 
+""" 
+def run_osu(test,cfgs=all):
+    if cfgs!='all':
+        cfgs=farg_to_list(cfgs,'osu')
+    nodes=2
+    
+    for s in cfg_profiles[osu_id]:
+"""        
 
 
 #Startpunkt
