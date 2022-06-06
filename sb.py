@@ -16,6 +16,7 @@ Potentielle Usereingaben
 """
 hpl_cfg_pth = ''
 osu_cfg_pth = ''
+misc_cfg_pth= ''
 spack_binary = ''
 
 
@@ -25,6 +26,7 @@ Hilfsvariablen
 """
 #Anzahl unterstützter Benchmarks (HPL, OSU, ...)
 benchcount = 2
+misc_id = 0
 hpl_id = 1
 osu_id = 2
 
@@ -43,11 +45,11 @@ Command-Line-Parameter
 def cl_arg():
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)    
     parser.add_argument('-i','--install',nargs='+',type=str,help=''+
-    '<Benchmark> <cfg>,<cfg>,...,<cfg> <Partition>\n'+
-    '     z.B.: -i hpl 1,3-4,Test1 partition\n'+
-    'all: Installiert alle Benchmarks/cfg\n' +
-    '     z.B.: -i all partition\n\n' +
-    '           -i osu all partition')
+    '<Benchmark> <cfg>,<cfg>,...,<cfg>\n'+
+    '     z.B.: -i hpl 1,3-4,Test1\n'+
+    'all: Installiert alle Benchmarks/cfg\n'+
+    '     z.B.: -i all\n\n'+
+    '           -i osu all\n\n')
     
     parser.add_argument('-r','--run',nargs='+',type=str,help=''+   
     'hpl <cfg>,<cfg>,...,<cfg>\n'+     
@@ -63,14 +65,13 @@ def cl_arg():
     check_data()
     check_dirs()
     get_cfg('osu')
-    get_cfg('hpl')  
+    get_cfg('hpl') 
+    get_cfg('misc')
    
     args= parser.parse_args()
     
     #Install Benchmarks
-    if args.install:
-        if len(args.install)<2:
-            return print('zu wenig Argumente')
+    if args.install:        
         expr=[]
         #Alle Profile aller Benchmarks werden installiert
         if args.install[0]=='all':
@@ -87,7 +88,7 @@ def cl_arg():
             else:
                 expr=get_all_specs(args.install[0])
                 
-        install_spec(expr,args.install[len(args.install)-1])
+        install_spec(expr)
     
     #Run Benchmarks
     if args.run:
@@ -150,12 +151,14 @@ def code_eval(expr):
 
 #Ermittelt Pfade relevanter Verzeichnisse und Binaries, wenn nichts spezifiziert wurde
 def find_paths():
-    global hpl_cfg_pth, osu_cfg_pth, spack_binary   
+    global hpl_cfg_pth, osu_cfg_pth, spack_binary,misc_cfg_pth  
     #An der Stelle, an der das Programm ausgeführt wird, sollten auch die configs sein
     if hpl_cfg_pth=='':
         hpl_cfg_pth = str(shell('pwd')+'/config/hpl/').replace('\n','').strip()
     if osu_cfg_pth=='':
         osu_cfg_pth = str(shell('pwd')+'/config/osu/').replace('\n','').strip()
+    if misc_cfg_pth=='':
+        misc_cfg_pth = str(shell('pwd')+'/config/').replace('\n','').strip()    
     if spack_binary=='':
         r_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()
         #Wir nehmen die erstbeste spack Binary, wenn nichts per Hand spezifiziert wurde
@@ -175,7 +178,9 @@ def check_data():
         #Ein Subliste pro Metadatenblock und drei Abschnitten je Profil
         cfg_profiles[1].append([[]]*4)
     for _ in range(0, len(get_cfg_names(osu_cfg_pth,'osu'))):
-        cfg_profiles[2].append([[]]*3)
+        cfg_profiles[2].append([[]]*4)
+   
+    cfg_profiles[0].append([[]]*4)
     
 
 #Existieren überhaupt log.txt, config/hpl/, config/hpl/hpl_cfg_[d, 1, ..., n] etc.
@@ -225,7 +230,10 @@ def get_names(pth):
 
 #Liefert Textfiles eines bestimmten Typs (z.B. hpl_cfg_(...).txt)
 def get_cfg_names(pth, type):
-    return fnmatch.filter(get_names(pth), type+'_cfg_*.txt')
+    if type == 'misc':
+        return ['config.txt']
+    else:
+        return fnmatch.filter(get_names(pth), type+'_cfg_*.txt')
 
 def config_out(bench_id):
     s=''
@@ -250,9 +258,11 @@ def config_out(bench_id):
 #Switcht Bench-ID/Tag
 def tag_id_switcher(bench):
     switcher={
+        '0': 'misc',
         '1': 'hpl',
         '2': 'osu',
       
+        'misc': misc_id,
         'hpl': hpl_id,
         'osu': osu_id
     }
@@ -264,6 +274,8 @@ def get_cfg_path(bench):
         return hpl_cfg_pth
     if bench is 'osu':
         return osu_cfg_pth
+    if bench is 'misc':
+        return misc_cfg_pth
     else:
         return -1 
 
@@ -389,10 +401,13 @@ def remove_redudant_specs(expr):
         
 #Schreibt Script zum installieren der specs 
 #TODO: Auslagern der Slurmparameter                    
-def install_spec(expr,partition):
+def install_spec(expr):
     #Entfernt unnötig redundate Specs
     expr=remove_redudant_specs(expr)
-    
+    partition=cfg_profiles[0][0][2][0]
+    node=cfg_profiles[0][0][2][1]
+    task=cfg_profiles[0][0][2][2]
+    cpus=cfg_profiles[0][0][2][3]
     #Check ob angegebene Partition existiert
     if shell('sinfo -h -p '+partition).find(partition)==-1:
         print('Partition: '+partition+' existiert nicht')
@@ -401,7 +416,7 @@ def install_spec(expr,partition):
     slurm=''
     specs=''
     #Holt sich max. CPU Anzahl der Partition
-    cpus=shell('sinfo -h -p '+partition+' -o "%c"').split('+')[0]
+    #cpus=shell('sinfo -h -p '+partition+' -o "%c"').split('+')[0]
     #Falls install.sh nicht existiert wird es erstellt und Ausführbar gemacht
     if (os.path.isfile('install.sh'))==False: 
             shell('touch install.sh')
@@ -413,13 +428,12 @@ def install_spec(expr,partition):
     
     #Slurmparameter für die Installation
     slurm='#!/bin/bash\n' \
-    +'#SBATCH --nodes=1\n' \
-    +'#SBATCH --ntasks=1\n' \
-    +'#SBATCH --cpus-per-task='+cpus \
+    +'#SBATCH --nodes='+node+'\n' \
+    +'#SBATCH --ntasks=1'+task+'\n' \
+    +'#SBATCH --cpus-per-task='+cpus+'\n' \
     +'#SBATCH --partition='+partition+'\n' \
     +'#SBATCH --output=install.out\n' \
-    +'#SBATCH --error=install.err\n\n' \
-    +'srun . ~/spack/share/spack/setup-env'    
+    +'#SBATCH --error=install.err\n\n'   
     file_w('install.sh',slurm,0)    
     
     for e in expr:
@@ -439,7 +453,7 @@ def install_spec(expr,partition):
         user=shell('echo $USER')
         info = shell('squeue -u '+user)
         error_log(info)
-        shell('sbatch install.sh')
+        #shell('sbatch install.sh')
         time.sleep(0.5)
         print('Installation läuft:\n'+info)
                 
@@ -596,6 +610,7 @@ def get_spec(cfg_list,bench):
     return spec
 
 #Liefert alle Specs einer Config-Liste bzw. eines Benchmarktyps
+#Erhält Benchmarkname und (optional) Liste mit Config-Namen
 def get_all_specs(bench,cfgs='all'):
     expr=[]
     for s in cfg_profiles[tag_id_switcher(bench)]:
@@ -611,25 +626,35 @@ def get_cfg(bench):
     spec_ = [] #Hilfsvariable zum Ermitteln des specs    
     id = tag_id_switcher(bench)    
     #l-te Configzeile (int), p für Profil (string)
-    for p in names: 
+    for p in names:
         abschnitt = 1
-        line_=1
-        for line_ in range(line_,count_line(get_cfg_path(bench)+'/'+p)):            
-            line = file_r(get_cfg_path(bench)+p,line_)            
-            if line.find('------')==-1:                
-                sublist.append(config_cut(line))
-                if abschnitt==1:                    
-                    spec_.append(line) #get_spec benötigt die ganze Zeile der config                
-            elif len(sublist)>0:                
-                cfg_profiles[id][names.index(p)][abschnitt] = sublist                
-                if abschnitt==1:
-                    spec = get_spec(spec_,bench)
-                    spec_ = []
-                abschnitt = abschnitt+1
-                sublist = []
+        line_=1        
+        while file_r(get_cfg_path(bench)+p,line_):                        
+            line = file_r(get_cfg_path(bench)+p,line_)
+            line_+=1            
+            if line.find('------')!=-1:
+                if len(sublist)>0: 
+                    cfg_profiles[id][names.index(p)][abschnitt] = sublist
+                    if abschnitt==1 and len(spec_)>0:                        
+                        spec = get_spec(spec_,bench)
+                        spec_ = []
+                    abschnitt+=1
+                    sublist = []                    
+                continue            
+            else:
+                if (id != misc_id or line[0:5]!='[Pfad'):
+                    sublist.append(config_cut(line))
+                if abschnitt==1 and id != misc_id:
+                    spec_.append(line) #get_spec benötigt die ganze Zeile der config 
+                    
         #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat
-        cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]
+        if len(sublist)>0:            
+            cfg_profiles[id][names.index(p)][abschnitt]=sublist 
+            sublist=[]
+        if id != misc_id:
+            cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec),spec]  
         print('...')  
+
 """
 Funktionen die HPL zuzuordnen sind
 """
