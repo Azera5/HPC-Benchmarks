@@ -3,6 +3,7 @@ import os.path
 import subprocess
 import datetime
 import inspect
+import shutil
 import time
 import math
 import fnmatch
@@ -163,9 +164,11 @@ def check_dirs():
         shell('mkdir -p '+osu_cfg_pth[:-1])
         initm = initm+'Config-Verzeichnis für OSU erstellt ...\n'
         #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
+    """
     if os.path.isfile(hpl_cfg_pth+'hpl_cfg_d.txt')==False:     
         shell('touch '+hpl_cfg_pth+'hpl_cfg_d.txt')
         initm = initm+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
+    """
 
 """
 #Liest die Profile aus den lokalen Configs aus
@@ -249,7 +252,7 @@ Debug- & Hilfs-Funktionen
 #In welcher Funktion ist wann, welche Exception o.a. Unregelmäßigkeit aufgetreten?
 def error_log(txt):
     global errorstack
-    txt = str(inspect.stack()[1][3])+' [Funktion] '+str(datetime.datetime.now())+' [Zeitpunkt] '+txt+'\n'
+    txt = str(inspect.stack()[1][3])+' [Funktion] '+time.strftime("%d-%m-%Y---%H:%M:%S", time.localtime())+' [Zeitpunkt] '+txt+'\n'
     file_w('log.txt', txt, 'a')
     errorstack.append(txt)
 
@@ -459,17 +462,22 @@ def eval_node_count(profile):
 
 #Sollte >1 und überhaupt spezifiziert sein, denn z.B. hpl will mit einem Prozess gar nicht erst starten!
 def eval_proc_count(profile):
-    if profile[3][2]!='' or profile[3][2]>1:
+    if profile[3][2]!='':
         return profile[3][2]
     else:
-        error_log('Prozesszahl unter- bzw. falsch (gleich 1) spezifiziert im Profil: '+profile[0][0])
+        error_log('Prozesszahl nicht spezifiziert im Profil: '+profile[0][0])
         #clear()
         if profile[3][2]=='':
             print('Die Prozesszahl im Profil {} wurde nicht spezifiziert...'.format(profile[0][0]))
-        elif profile[3][2]==1:
-            print('Die Prozesszahl (=1) im Profil {} ist nicht unbedingt sinnvoll...'.format(profile[0][0]))
-        print('Korrektur?')
-        return input_format()
+        while True:
+            print('Korrektur? (abbr. mit 0)')
+            num = input_format()
+            if num!=0 and type(num) is int:
+                return input_format()
+            elif num==0:
+                break
+            else:
+                continue
 
 def find_binary(profile, bench_id):
     #Primärpackage isolieren
@@ -486,7 +494,8 @@ def find_binary(profile, bench_id):
             bin_path = ((bin_path[_:]).strip()+'/bin/')
     return bin_path
 
-
+def delete_dir_tree(pth):
+    shutil.rmtree(pth)
 
 """
 Skriptbau-Funktionen
@@ -498,7 +507,8 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     #Vorschlag: Überarbeitung der Menü-Ausgabe, vll über eine globale String-Variable, das würde simultane Menü und Flag-Nutzung erlauben
     #z.B. global menutxt und in der menu-Fkt das printen immer über diese globale Variable
     #Falls das überhaupt nötig ist...
-    menutxt, tag, pth = '', tag_id_switcher(bench_id), get_cfg_path(tag)
+    menutxt, tag = '', tag_id_switcher(bench_id)
+    pth = get_cfg_path(tag)
     
     #Aufarbeitung des Argumentstrings
     if farg == 'all':
@@ -532,7 +542,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     
     #Prüfe ob alle verfügbar sind, breche sonst ab TODO
     
-    #Skriptbau
+    #Skriptbau, ggf. mit zusätzlichen Argumenten
     if extra_args!='':
         menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, bench_id, extra_args)
     else:
@@ -547,13 +557,14 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     tag = tag_id_switcher(bench_id)
     
     batchtxt='#!/bin/bash\n'
-    #Noch mehr Einstellungen
     
-    tstamp = time.ctime()
+    tstamp = time.strftime("%d-%m-%Y_%H:%M:%S", time.localtime())
     
     #Namen der Auftragsordner
     run_dir = 'projects/'+tag+'_'+'['+tstamp+']'+'_'+'[run]/'
     res_dir = 'projects/'+tag+'_'+'['+tstamp+']'+'_'+'[results]/'
+    print(run_dir)
+    print(res_dir)
     
     #Erst mal statisch & Minimalallokation
     #An dieser Stelle sollten später aus den allgemeinen Metadaten die Allokationsparameter ausgelesen werden <-- TODO
@@ -564,25 +575,29 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     batchtxt+='#SBATCH --output='+run_dir+tag+'_run'+'['+tstamp+']'+'.out'+'\n'
     batchtxt+='#SBATCH --error='+run_dir+tag+'_run'+'['+tstamp+']'+'.err'+'\n'
     
-    if os.path.isdir('projects/'+run_dir[:-1])==False:     
-        shell('mkdir -p '+'projects/'+run_dir[:-1])
-    if os.path.isdir('projects/'+res_dir[:-1])==False:     
-        shell('mkdir -p '+'projects/'+res_dir[:-1])
+    if os.path.isdir(run_dir[:-1])==False:     
+        shell('mkdir -p '+run_dir[:-1])
+    if os.path.isdir(res_dir[:-1])==False:     
+        shell('mkdir -p '+res_dir[:-1])
     
     #Einzelne Jobskripte je Profil
     for profile in selected_profiles:
         if bench_id == hpl_id:
             #Anpassung z.B. für den Fall: versch. Profile benutzen gleiches hpl package mit untersch. HPL.dat Parametern
             #hpl_handler_pth muss noch per Funktion definiert werden! <-- TODO
-            batchtxt+='python3 '+hpl_handler_xpth+' '+profile[0][1]+' '+profile[0][2]+'\n'
+            if profile[0][2]!='Kein Pfad gefunden!':
+                batchtxt+='python3 '+hpl_handler_xpth+'.py'+' '+profile[0][1]+' '+profile[0][2]+'\n'
+            else:
+                #Wenn der Ort der Binary nicht klar ist, soll auch kein Jobscript gebaut werden...
+                continue
         if extra_args!='':
-            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir, extra_args)
+            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir, extra_args)+'\n'
         elif len(extra_args)==0:
-            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir)
+            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir)+'\n'
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
-    file_w(run_dir+'{}.sh'.format(tag+'_run'+'['+tstamp+']'),batchtxt,'a')
-    return run_dir+'{}.sh'.format(tag+'_run'+'['+tstamp+']')
+    file_w(run_dir+'{}.sh'.format(tag+'_run_batchscript'),batchtxt,'a')
+    return run_dir+'{}.sh'.format(tag+'_run_batchscript')
 
 def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
 
@@ -624,21 +639,30 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
     #Jobname (<=> Profilname)
     jobtxt+='#SBATCH --job-name={}\n'.format(profile[0][0][:-4])
     #Ziel für Output (sollte in (...)[results] landen)
-    jobtxt+='#SBATCH --output={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.out')
+    if profile[3][10]=='':
+        jobtxt+='#SBATCH --output={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.out')
+    else:
+        jobtxt+='#SBATCH --job-name={}\n'.format(profile[3][10])
     #Ziel für Fehler (sollte in (...)[results] landen)
-    jobtxt+='#SBATCH --error={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.err')
+    if profile[3][11]=='':
+        jobtxt+='#SBATCH --error={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.err')
+    else:
+        jobtxt+='#SBATCH --job-name={}\n'.format(profile[3][11])
     #<--- Überschreibmöglichkeit für individuelle Skripte? (vll mit offenem Block)    
     
     jobtxt+='\n'
     
     #Sourcen von spack <--- TODO: verallgemeinern für bel. Pfade
-    jobtxt+='source ~/spack/share/spack/setup-env.sh'
+    jobtxt+='source {}/share/spack/setup-env.sh'.format(spack_binary[:-4])
     
     #Laden der passenden Module
-    #Funktioniert nur für hpl! (Metadaten haben andere Struktur...) <--- TODO: verallgemeinern für bel. benchmarks
+    """
     module = profile[0][3].replace('^',' ').split()
     for _ in module:
         jobtxt+= 'spack load {}\n'.format(module[_])
+    """
+    #Diese Variante 'bröselt' nicht auf
+    jobtxt+= 'spack load {}\n'.format(profile[0][3])   
     
     jobtxt+='\n'
     
@@ -649,9 +673,18 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
     #
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
-    if os.path.isdir('projects/'+run_dir[:-1])==True:
+    if os.path.isdir(run_dir[:-1])==True:
         file_w(run_dir+'{}.sh'.format(profile[0][0][:-4]),jobtxt,'a')
     return run_dir+'{}.sh'.format(profile[0][0][:-4])
+
+def execute_line(bench_id, bin_path, proc_count, extra_args):
+    txt = ''
+    if bench_id==hpl_id:
+        txt+='cd {}'.format(bin_path)+'\n' #<--- TODO: schöner lösen?
+        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path)
+    elif bench_id==osu_id:
+        txt+='unklar...' #<--- TODO; extra_args sind für flags etc.
+    return txt
 
 
 
@@ -936,22 +969,17 @@ def file_w(name, txt, pos):
             with open(name, 'r') as f:      
                 stringlist = f.readlines()
             #...ändern den passenden Index ab...
-            #-> Vorsicht: Index-Fehler bzgl. leerer Zeilen!
+            org_size = len(stringlist)    
+            while len(stringlist)<=pos:
+                stringlist.append('\n')
+                
+            stringlist[int(pos)]=txt+'\n'
             
-            #print('Schreibtest (vor-1): '+stringlist[int(pos-1)])
-            #print('Schreibtest (vor): '+stringlist[int(pos)])
-            #print('Schreibtest (vor+1): '+stringlist[int(pos+1)])
-            stringlist[int(pos)]=txt
-            #print('Schreibtest (nach-1): '+stringlist[int(pos-1)])
-            #print('Schreibtest (nach): '+stringlist[int(pos)])
-            #print('Schreibtest (nach+1): '+stringlist[int(pos+1)])
-            #...und schreiben sie wieder zurück
-            
-            with open(name, 'w') as f:      
+            with open(name, 'w') as f:
                 f.writelines(stringlist)
         else:
             with open(name, "a") as f:     
-                f.write('\n'+txt)
+                f.write(txt+'\n')
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_w wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))
 
@@ -1007,14 +1035,6 @@ def hpl_run(farg = 'all'):
     
     return menutxt
 """
-
-def execute_line(bench_id, bin_path, proc_count, extra_args):
-    txt = ''
-    if bench_id==hpl_id:
-        txt = 'mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path)
-    elif bench_id==osu_id:
-        txt = 'unklar...'
-    return txt
 
 #Startpunkt
 clear()
