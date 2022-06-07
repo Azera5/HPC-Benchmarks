@@ -3,7 +3,9 @@ import os.path
 import subprocess
 import datetime
 import inspect
+import shutil
 import time
+import math
 import fnmatch
 import re
 import argparse
@@ -18,7 +20,7 @@ hpl_cfg_pth = ''
 osu_cfg_pth = ''
 misc_cfg_pth= ''
 spack_binary = ''
-
+hpl_handler_xpth = 'hpl_dat_handler'
 
 
 """
@@ -67,6 +69,8 @@ def cl_arg():
     get_cfg('osu')
     get_cfg('hpl') 
     get_cfg('misc')
+    #Hilfestellung
+    config_out(hpl_id)
    
     args= parser.parse_args()
     
@@ -109,6 +113,138 @@ def cl_arg():
         menu()
 
 
+
+"""
+Wichtige Vorlauf-Funktionen
+"""
+
+#Ermittelt Pfade relevanter Verzeichnisse und Binaries, wenn nichts spezifiziert wurde
+def find_paths():
+    global hpl_cfg_pth, osu_cfg_pth, spack_binary,misc_cfg_pth  
+    #An der Stelle, an der das Programm ausgeführt wird, sollten auch die configs sein
+    if hpl_cfg_pth=='':
+        hpl_cfg_pth = str(shell('pwd')+'/config/hpl/').replace('\n','').strip()
+    if osu_cfg_pth=='':
+        osu_cfg_pth = str(shell('pwd')+'/config/osu/').replace('\n','').strip()
+    if misc_cfg_pth=='':
+        misc_cfg_pth = str(shell('pwd')+'/config/').replace('\n','').strip()    
+    if spack_binary=='':
+        r_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()
+        #Wir nehmen die erstbeste spack Binary, wenn nichts per Hand spezifiziert wurde
+        spack_binary = r_list[0].strip()
+
+def check_data():
+    global cfg_profiles
+    #Für jeden Bench eine Liste, in jeder dieser Listen eine Liste pro Profil
+
+    #Struktur: cfg_profiles[Benchmarktyp][Profil][Block][Zeile]
+    for _ in range(0, len(get_cfg_names(hpl_cfg_pth,'hpl'))):
+        #Für jedes Profil existieren verschiedene Blöcke an Informationen (z.B. über SLURM-Einstellungen)
+        cfg_profiles[hpl_id].append([[]]*4)
+    for _ in range(0, len(get_cfg_names(osu_cfg_pth,'osu'))):
+        #Für jedes Profil existieren verschiedene Blöcke (analog zu s. oben)
+        cfg_profiles[osu_id].append([[]]*4)
+    #Hinweis: ['test']*n <=> ['test, 'test', ...] vgl. ['test'*n] = ['testtesttest...']
+    
+    #Spezielle Angaben z.B. welche Partition/Nodes usw. gelten für Installationsdienste etc.
+    cfg_profiles[misc_id].append([[]]*4)
+
+#Existieren überhaupt log.txt, config/hpl/, config/hpl/hpl_cfg_[d, 1, ..., n] etc.
+def check_dirs():
+    global initm
+    #Hinweis: '/dir1/dir2/.../'[:-1] <=> '/dir1/dir2/...'
+    if os.path.isfile('log.txt')==False:     
+        shell('touch log.txt')
+        initm = initm+'errorlog erstellt ...\n'
+    if os.path.isdir(hpl_cfg_pth[:-1])==False:     
+        shell('mkdir -p '+hpl_cfg_pth[:-1])
+        initm = initm+'Config-Verzeichnis für HPL erstellt ...\n'
+        #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
+    if os.path.isdir(osu_cfg_pth[:-1])==False:     
+        shell('mkdir -p '+osu_cfg_pth[:-1])
+        initm = initm+'Config-Verzeichnis für OSU erstellt ...\n'
+        #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
+    """
+    if os.path.isfile(hpl_cfg_pth+'hpl_cfg_d.txt')==False:     
+        shell('touch '+hpl_cfg_pth+'hpl_cfg_d.txt')
+        initm = initm+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
+    """
+
+"""
+#Liest die Profile aus den lokalen Configs aus
+def get_cfg(bench):
+    global cfg_profiles
+    names = get_cfg_names(get_cfg_path(bench), bench)
+    sublist = []
+    spec_ = [] #Hilfsvariable zum Ermitteln des specs    
+    id = tag_id_switcher(bench)    
+    #l-te Configzeile (int), p für Profil (string)
+    for p in names:
+        abschnitt = 1
+        line_=1        
+        while file_r(get_cfg_path(bench)+p,line_):                        
+            line = file_r(get_cfg_path(bench)+p,line_)
+            line_+=1            
+            if line.find('------')!=-1:
+                if len(sublist)>0: 
+                    cfg_profiles[id][names.index(p)][abschnitt] = sublist
+                    if abschnitt==1 and len(spec_)>0:                        
+                        spec = get_spec(spec_,bench)
+                        spec_ = []
+                    abschnitt+=1
+                    sublist = []                    
+                continue            
+            else:
+                if (id != misc_id or line[0:5]!='[Pfad'):
+                    sublist.append(config_cut(line))
+                if abschnitt==1 and id != misc_id:
+                    spec_.append(line) #get_spec benötigt die ganze Zeile der config 
+                    
+        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat
+        if len(sublist)>0:            
+            cfg_profiles[id][names.index(p)][abschnitt]=sublist 
+            sublist=[]
+        if id != misc_id:
+            cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec),spec]  
+        print('...')  
+"""
+    
+def get_cfg(bench):
+    global cfg_profiles
+    names = get_cfg_names(get_cfg_path(bench), bench)
+    sublist, spec_ = [], []
+    id = tag_id_switcher(bench)
+    #Für jedes Profil...
+    for p in names:
+        abschnitt = 1
+        txtfile = open(get_cfg_path(bench)+p, 'r')
+        txtlist = txtfile.readlines()
+        #...jede Zeile passend einsortieren!
+        for ln in txtlist:
+            #Eine Reguläre Zeile wird in der Subliste gesammelt
+            if (ln.find('-----')==-1) and (ln.find('[Pfad')==-1):
+                sublist.append(config_cut(ln))
+                if abschnitt==1:
+                    spec_.append(ln)
+            #Eine Trennzeile löst die Eingliederung eines gefüllten Blocks aus
+            elif (len(sublist)>0) and (ln.find('-----')>-1):
+                cfg_profiles[id][names.index(p)][abschnitt]=sublist
+                abschnitt+=1
+                sublist=[]
+                continue
+            #Eine folgende Trennzeile macht gar nichts
+            else:
+                continue                   
+        #Normale Profile brauchen auch noch Metadaten
+        if id != misc_id:
+            spec = get_spec(spec_,bench)
+            cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]  
+        #Letzter Block & Resett der Variablen
+        cfg_profiles[id][names.index(p)][abschnitt]=sublist
+        sublist, spec_, spec = [], [], '' 
+        print('...') 
+        txtfile.close()
+
 """
 Debug- & Hilfs-Funktionen
 """
@@ -116,7 +252,7 @@ Debug- & Hilfs-Funktionen
 #In welcher Funktion ist wann, welche Exception o.a. Unregelmäßigkeit aufgetreten?
 def error_log(txt):
     global errorstack
-    txt = str(inspect.stack()[1][3])+' [Funktion] '+str(datetime.datetime.now())+' [Zeitpunkt] '+txt+'\n'
+    txt = str(inspect.stack()[1][3])+' [Funktion] '+time.strftime("%d-%m-%Y---%H:%M:%S", time.localtime())+' [Zeitpunkt] '+txt+'\n'
     file_w('log.txt', txt, 'a')
     errorstack.append(txt)
 
@@ -137,10 +273,11 @@ def shell(cmd):
         #.stdout liefert einen Binärstring desw. die Dekodierung
         return p.stdout.decode('UTF-8')
     except Exception as exc:
-        error_log(' {} [Exception]'.format(type(exc).__name__))
+        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nshell wurde aufgerufen aus: '+str(inspect.stack()[1][3]))
 
 #Wertet einen Python-Ausdruck aus
 def code_eval(expr):
+    #Auskommentiert für volle Fehlermeldungen
     """
     try:
         return eval(expr)
@@ -148,59 +285,6 @@ def code_eval(expr):
         error_log(' {} [Exception]'.format(type(exc).__name__))
     """
     return eval(expr)
-
-#Ermittelt Pfade relevanter Verzeichnisse und Binaries, wenn nichts spezifiziert wurde
-def find_paths():
-    global hpl_cfg_pth, osu_cfg_pth, spack_binary,misc_cfg_pth  
-    #An der Stelle, an der das Programm ausgeführt wird, sollten auch die configs sein
-    if hpl_cfg_pth=='':
-        hpl_cfg_pth = str(shell('pwd')+'/config/hpl/').replace('\n','').strip()
-    if osu_cfg_pth=='':
-        osu_cfg_pth = str(shell('pwd')+'/config/osu/').replace('\n','').strip()
-    if misc_cfg_pth=='':
-        misc_cfg_pth = str(shell('pwd')+'/config/').replace('\n','').strip()    
-    if spack_binary=='':
-        r_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()
-        #Wir nehmen die erstbeste spack Binary, wenn nichts per Hand spezifiziert wurde
-        spack_binary = r_list[0].strip()
-
-def check_data():
-    global cfg_profiles
-    #Für jeden Bench eine Liste, in jeder dieser Listen eine Liste pro Profil
-    """
-    _ = ['hpl:empty'*len(get_cfg_names(hpl_cfg_pth,'hpl'))]
-    cfg_profiles.append(_)
-    _ = ['osu:empty'*len(get_cfg_names(osu_cfg_pth,'osu'))]
-    cfg_profiles.append(_)
-    """
-    #Hinweis: ['test']*n <=> ['test, 'test', ...] vgl. ['test'*n] = ['testtesttest...']
-    for _ in range(0, len(get_cfg_names(hpl_cfg_pth,'hpl'))):
-        #Ein Subliste pro Metadatenblock und drei Abschnitten je Profil
-        cfg_profiles[1].append([[]]*4)
-    for _ in range(0, len(get_cfg_names(osu_cfg_pth,'osu'))):
-        cfg_profiles[2].append([[]]*4)
-   
-    cfg_profiles[0].append([[]]*4)
-    
-
-#Existieren überhaupt log.txt, config/hpl/, config/hpl/hpl_cfg_[d, 1, ..., n] etc.
-def check_dirs():
-    global initm
-    #Hinweis: '/dir1/dir2/.../'[:-1] <=> '/dir1/dir2/...'
-    if os.path.isfile('log.txt')==False:     
-        shell('touch log.txt')
-        initm = initm+'errorlog erstellt ...\n'
-    if os.path.isdir(hpl_cfg_pth[:-1])==False:     
-        shell('mkdir -p '+hpl_cfg_pth[:-1])
-        initm = initm+'Config-Verzeichnis für HPL erstellt ...\n'
-        #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
-    if os.path.isdir(osu_cfg_pth[:-1])==False:     
-        shell('mkdir -p '+osu_cfg_pth[:-1])
-        initm = initm+'Config-Verzeichnis für OSU erstellt ...\n'
-        #Hier sollte noch eine Funktion sinnvolle Werte reinschreiben! <---TODO
-    if os.path.isfile(hpl_cfg_pth+'hpl_cfg_d.txt')==False:     
-        shell('touch '+hpl_cfg_pth+'hpl_cfg_d.txt')
-        initm = initm+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
 
 #Liefert für eine Configzeile "123.4.5   [Parameter x]" nur die Zahl
 def config_cut(line):
@@ -235,14 +319,39 @@ def get_cfg_names(pth, type):
     else:
         return fnmatch.filter(get_names(pth), type+'_cfg_*.txt')
 
+
+#Bekommt eine Liste bzgl. der Packages aus einer Config, liefert die package spec
+def get_spec(cfg_list,bench):
+    if bench is 'osu':
+        bench='osu-micro-benchmarks'
+    spec = bench    
+    for _ in cfg_list:      
+        _ = _.split('[')
+        if len(_[0]) > 0:
+            _[0]=_[0].rstrip()            
+            if _[1].find('Version')!=-1:
+                spec = spec+'@'
+            elif _[1].find('Compiler')!=-1:
+                spec = spec+'%'
+            else:
+                spec=spec+'^'                
+            spec=spec+_[0] 
+    return spec
+
+#Liefert alle Specs einer Config-Liste bzw. eines Benchmarktyps
+#Erhält Benchmarkname und (optional) Liste mit Config-Namen
+def get_all_specs(bench,cfgs='all'):
+    expr=[]
+    for s in cfg_profiles[tag_id_switcher(bench)]:
+        if cfgs=='all' or s[0][0] in cfgs:
+            expr.append(s[0][3])    
+    return expr
+
 def config_out(bench_id):
     s=''
     for p in cfg_profiles[bench_id]:
         #Metadaten
         s += 'Profil: '+p[0][0]+'\n'
-        if (p[0][1]!='')and(p[0][2]!=''):
-            s += 'Configpfad: '+p[0][1]+'\n'
-            s += 'Zielpfad: '+p[0][2]+'\n'
         #Abschnitte der Profile
         for b in range(0,len(p)):
             s += '->Block: '+str(b)+'\n'
@@ -286,7 +395,297 @@ def get_target_path(spec):
     else:
         pth = shell(spack_binary+' find --paths '+spec[:spec.find('^')])
     _ = pth.find('/home')
-    return ((pth[_:]).strip()+'/bin')
+    r = (pth[_:]).strip()
+    if r!='':
+        return r+'/bin'
+    else:
+        error_log('Ein Pfad für '+spec[:spec.find('^')]+' konnte nicht gefunden werden!')
+        return 'Kein Pfad gefunden!'
+
+
+#Überschreibt die Zeilen von s_line (int) bis inkl. e_line (int) von file1 nach (ggf. mit Offset) file2
+def transfer_lines(fpath_1, fpath_2, s_line = 0, e_line = -1, offset = 0):
+    if e_line==-1:
+        e_line = sum(1 for line in open(fpath_1))
+    for _ in range(s_line,e_line+1):
+        file_w(fpath_2,file_r(fpath_1,_),_+offset)
+
+#Erwartet: Argumentliste zu -r/-i und der Benchname (String)
+def farg_to_list(farg, bench):
+    names = farg.split(',')
+    for e in names:
+        _ = str(e).find('-')
+        #Umwandeln von Bindestrichnotation zu konkreten Zahlen: 3-5 -> 3 4 5
+        if _!=-1:
+            #Hinweis zum Slicen: string[a:b] <=> mit Index a aber ohne Index b
+            #Hinweis zu range(x,y): Inkl. Index x aber kleiner Index y
+            for i in range(int(e[:_]),int(e[_+1:])+1):
+                names.append(i)
+            #Eintrag abgearbeitet
+            del names[names.index(e)]
+    for e in names:
+        #print('farg-to-list:'+str(names[names.index(e)]))
+        names[names.index(e)] = bench+'_cfg_'+str(e)+'.txt'
+    return names
+
+#Eine Partition muss angegeben werden, sonst wird der User aufgefordert zu ergänzen
+def eval_partition(profile):
+    if profile[3][0]!='':
+        return profile[3][0]
+    else:
+        error_log('Partition unterspezifiziert im Profil: '+profile[0][0])
+        while True:
+            #clear()
+            print('Eine Partition im Profil {} wurde nicht spezifiziert...'.format(profile[0][0]))
+            avail_part = shell('sinfo -h --format=%R')
+            print('Vorschläge: '+avail_part)
+            inp = input_format()
+            if inp in avail_part.split():
+                return inp
+            else:
+                continue
+
+#Falls keine Nodezahl spezifiziert ist, erst mal Benchunabhängig
+def eval_node_count(profile):
+    if profile[3][1]!='':
+        if profile[3][2]!='' and profile[3][3]!='':
+            if profile[3][1]<math.ceil(int(profile[3][2])/int(profile[3][3])):
+                error_log('Nodezahl unstimmig bzgl. Prozess-&task-per-node-Zahl im Profil: '+profile[0][0])
+        else:
+            return profile[3][1]
+    elif profile[3][2]!='' and profile[3][3]!='':
+        #z.B. 7 Prozesse, 3 task per node -> Aufrundung von 7/3 -> 3 Nodes allokieren
+        return math.ceil(int(profile[3][2])/int(profile[3][3]))
+    else:
+        error_log('Nodezahl unterspezifiziert im Profil: '+profile[0][0])
+        return 1
+
+#Sollte >1 und überhaupt spezifiziert sein, denn z.B. hpl will mit einem Prozess gar nicht erst starten!
+def eval_proc_count(profile):
+    if profile[3][2]!='':
+        return profile[3][2]
+    else:
+        error_log('Prozesszahl nicht spezifiziert im Profil: '+profile[0][0])
+        #clear()
+        if profile[3][2]=='':
+            print('Die Prozesszahl im Profil {} wurde nicht spezifiziert...'.format(profile[0][0]))
+        while True:
+            print('Korrektur? (abbr. mit 0)')
+            num = input_format()
+            if num!=0 and type(num) is int:
+                return input_format()
+            elif num==0:
+                break
+            else:
+                continue
+
+def find_binary(profile, bench_id):
+    #Primärpackage isolieren
+    _ = profile[0][3].find('^')
+    spec_short = (profile[0][3][:_]).strip()
+    
+    if bench_id == hpl_id:
+        bin_path = shell(spack_binary+' find --paths '+spec_short)
+        #Die Benchmarks sollten vom home-Verzeichnis aus erreichbar sein... <-- TODO: klären ob das den Anforderungen entspricht
+        _ = bin_path.find('/home')
+        if _ == -1:
+            error_log('Das Benchmark-Package {} ist (zumindest lokal) nicht aufzufinden! Profil: '.format(spec_short)+profile[0][0])
+        else:
+            bin_path = ((bin_path[_:]).strip()+'/bin/')
+    return bin_path
+
+def delete_dir_tree(pth):
+    shutil.rmtree(pth)
+
+"""
+Skriptbau-Funktionen
+"""
+
+#Default Argument <=> wir wollen alle Profile laufen lassen
+def bench_run(bench_id, farg = 'all', extra_args = ''):
+
+    #Vorschlag: Überarbeitung der Menü-Ausgabe, vll über eine globale String-Variable, das würde simultane Menü und Flag-Nutzung erlauben
+    #z.B. global menutxt und in der menu-Fkt das printen immer über diese globale Variable
+    #Falls das überhaupt nötig ist...
+    menutxt, tag = '', tag_id_switcher(bench_id)
+    pth = get_cfg_path(tag)
+    
+    #Aufarbeitung des Argumentstrings
+    if farg == 'all':
+        names = get_cfg_names(pth, tag)
+    else:
+        names = farg_to_list(farg, tag)
+    
+    #Die Liste der Namen der verfügbaren Profile
+    avail_names = get_cfg_names(pth, tag)
+    #Die Liste der Namen der nicht verfügbaren Profile
+    unavail_names = []
+    
+    #Die Liste der geladenen Profile aus dem Config-Ordner
+    selected_profiles = cfg_profiles[bench_id]
+    #Namen von verfügbaren aber nicht ausgewählten Profilnamen
+    unselected_names = []
+    
+    for profile in selected_profiles:
+        #profile[0][0] <=> Wir schauen in den Metadaten nach dem Profilnamen
+        if profile[0][0] not in names:
+            #Aussortieren, falls der Name nicht unter den übergebenen Namen ist
+            del selected_profiles[selected_profiles.index(profile)]
+            unselected_names.append(profile[0][0])
+    for name in names:
+        if name not in avail_names:
+            error_log('Profil: '+name+' war nicht verfügbar!')
+            menutxt+='Profil: '+name+' war nicht verfügbar!'+'\n'
+            unavail_names.append(name)
+    for profile in selected_profiles:
+        menutxt+='Ausgewählt: '+profile[0][0]+'\n'
+    
+    #Prüfe ob alle verfügbar sind, breche sonst ab TODO
+    
+    #Skriptbau, ggf. mit zusätzlichen Argumenten
+    if extra_args!='':
+        menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, bench_id, extra_args)
+    else:
+        menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, bench_id)
+    
+    return menutxt
+
+#Hiermit soll das Skript gebaut werden
+#Welche Parameter wären sinnvoll? <---- TODO 
+def build_batch(selected_profiles, bench_id, extra_args = ''):
+    
+    tag = tag_id_switcher(bench_id)
+    
+    batchtxt='#!/bin/bash\n'
+    
+    tstamp = time.strftime("%d-%m-%Y_%H:%M:%S", time.localtime())
+    
+    #Namen der Auftragsordner
+    run_dir = 'projects/'+tag+'_'+'['+tstamp+']'+'_'+'[run]/'
+    res_dir = 'projects/'+tag+'_'+'['+tstamp+']'+'_'+'[results]/'
+    print(run_dir)
+    print(res_dir)
+    
+    #Erst mal statisch & Minimalallokation
+    #An dieser Stelle sollten später aus den allgemeinen Metadaten die Allokationsparameter ausgelesen werden <-- TODO
+    batchtxt+='#SBATCH --partition=vl-parcio\n'
+    batchtxt+='#SBATCH --begin=now+120\n'
+    batchtxt+='#SBATCH --nodes=1\n'
+    batchtxt+='#SBATCH --job-name='+tag+'_run'+'['+tstamp+']'+'\n'
+    batchtxt+='#SBATCH --output='+run_dir+tag+'_run'+'['+tstamp+']'+'.out'+'\n'
+    batchtxt+='#SBATCH --error='+run_dir+tag+'_run'+'['+tstamp+']'+'.err'+'\n'
+    
+    if os.path.isdir(run_dir[:-1])==False:     
+        shell('mkdir -p '+run_dir[:-1])
+    if os.path.isdir(res_dir[:-1])==False:     
+        shell('mkdir -p '+res_dir[:-1])
+    
+    #Einzelne Jobskripte je Profil
+    for profile in selected_profiles:
+        if bench_id == hpl_id:
+            #Anpassung z.B. für den Fall: versch. Profile benutzen gleiches hpl package mit untersch. HPL.dat Parametern
+            #hpl_handler_pth muss noch per Funktion definiert werden! <-- TODO
+            if profile[0][2]!='Kein Pfad gefunden!':
+                batchtxt+='python3 '+hpl_handler_xpth+'.py'+' '+profile[0][1]+' '+profile[0][2]+'\n'
+            else:
+                #Wenn der Ort der Binary nicht klar ist, soll auch kein Jobscript gebaut werden...
+                continue
+        if extra_args!='':
+            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir, extra_args)+'\n'
+        elif len(extra_args)==0:
+            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir)+'\n'
+    
+    #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
+    file_w(run_dir+'{}.sh'.format(tag+'_run_batchscript'),batchtxt,'a')
+    return run_dir+'{}.sh'.format(tag+'_run_batchscript')
+
+def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
+
+    #Manche Dinge werden direkt ermittelt...
+    proc_count = eval_proc_count(profile)
+    bin_path = find_binary(profile, bench_id)
+
+    #Shebang
+    jobtxt='#!/bin/bash\n'
+    #Partition per Funktion (ggf. Usereingabe)
+    jobtxt+='#SBATCH --partition={}\n'.format(eval_partition(profile)) 
+    #Nodezahl wird per Funktion bestimmt aus tasks per node und der Prozessanzahl
+    jobtxt+='#SBATCH --nodes={}\n'.format(eval_node_count(profile))
+    """
+    #Anzahl der Prozesse
+    jobtxt+='#SBATCH --ntasks={}\n'.format(proc_count)
+    """
+    #Anzahl der Prozesse pro Node
+    if profile[3][3]!='':
+        jobtxt+='#SBATCH --ntasks-per-node={}\n'.format(profile[3][3])
+    #Anzahl der CPUs pro Task/Prozess(default lt. SLURM-Doku: 1 Kern per Task)
+    if profile[3][4]!='':
+        jobtxt+='#SBATCH --cpus-per-task={}\n'.format(profile[3][4])
+    #Anzahl an allokiertem Speicher pro CPU
+    if profile[3][5]!='':
+        jobtxt+='#SBATCH --mem-per-cpu={}\n'.format(profile[3][5])
+    #Startzeitpunkt
+    if profile[3][6]!='':
+        jobtxt+='#SBATCH --begin={}\n'.format(profile[3][6])
+    #Zeitlimit
+    if profile[3][7]!='':
+        jobtxt+='#SBATCH --time={}\n'.format(profile[3][7])
+    #Ziel-User für Emailbenachrichtigungen
+    if profile[3][8]!='':
+        jobtxt+='#SBATCH --mail-user={}\n'.format(profile[3][8])
+    #Valide Trigger für Benachrichtigungen
+    if profile[3][9]!='':
+        jobtxt+='#SBATCH --mail-type={}\n'.format(profile[3][9])
+    #Jobname (<=> Profilname)
+    jobtxt+='#SBATCH --job-name={}\n'.format(profile[0][0][:-4])
+    #Ziel für Output (sollte in (...)[results] landen)
+    if profile[3][10]=='':
+        jobtxt+='#SBATCH --output={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.out')
+    else:
+        jobtxt+='#SBATCH --job-name={}\n'.format(profile[3][10])
+    #Ziel für Fehler (sollte in (...)[results] landen)
+    if profile[3][11]=='':
+        jobtxt+='#SBATCH --error={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.err')
+    else:
+        jobtxt+='#SBATCH --job-name={}\n'.format(profile[3][11])
+    #<--- Überschreibmöglichkeit für individuelle Skripte? (vll mit offenem Block)    
+    
+    jobtxt+='\n'
+    
+    #Sourcen von spack <--- TODO: verallgemeinern für bel. Pfade
+    jobtxt+='source {}/share/spack/setup-env.sh'.format(spack_binary[:-4])
+    
+    #Laden der passenden Module
+    """
+    module = profile[0][3].replace('^',' ').split()
+    for _ in module:
+        jobtxt+= 'spack load {}\n'.format(module[_])
+    """
+    #Diese Variante 'bröselt' nicht auf
+    jobtxt+= 'spack load {}\n'.format(profile[0][3])   
+    
+    jobtxt+='\n'
+    
+    #Skriptzeile in der eine Binary ausgeführt wird
+    jobtxt+=execute_line(bench_id, bin_path, proc_count, extra_args)
+    
+    #TODO: Entladen von Modulen, nötig? Das ist ja ein abgeschlossenes Jobscript...
+    #
+    
+    #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
+    if os.path.isdir(run_dir[:-1])==True:
+        file_w(run_dir+'{}.sh'.format(profile[0][0][:-4]),jobtxt,'a')
+    return run_dir+'{}.sh'.format(profile[0][0][:-4])
+
+def execute_line(bench_id, bin_path, proc_count, extra_args):
+    txt = ''
+    if bench_id==hpl_id:
+        txt+='cd {}'.format(bin_path)+'\n' #<--- TODO: schöner lösen?
+        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path)
+    elif bench_id==osu_id:
+        txt+='unklar...' #<--- TODO; extra_args sind für flags etc.
+    return txt
+
 
 
 """
@@ -403,7 +802,7 @@ def remove_redudant_specs(expr):
 #TODO: Auslagern der Slurmparameter                    
 def install_spec(expr):
     #Entfernt unnötig redundate Specs
-    expr=remove_redudant_specs(expr)
+    #expr=remove_redudant_specs(expr)
     partition=cfg_profiles[0][0][2][0]
     node=cfg_profiles[0][0][2][1]
     task=cfg_profiles[0][0][2][2]
@@ -429,7 +828,7 @@ def install_spec(expr):
     #Slurmparameter für die Installation
     slurm='#!/bin/bash\n' \
     +'#SBATCH --nodes='+node+'\n' \
-    +'#SBATCH --ntasks=1'+task+'\n' \
+    +'#SBATCH --ntasks='+task+'\n' \
     +'#SBATCH --cpus-per-task='+cpus+'\n' \
     +'#SBATCH --partition='+partition+'\n' \
     +'#SBATCH --output=install.out\n' \
@@ -438,7 +837,7 @@ def install_spec(expr):
     
     for e in expr:
         if check_expr(e):
-            e=remove_installed_spec(e)            
+            #e=remove_installed_spec(e)            
             if e != '':                    
                 specs=specs+'srun spack install '+e+'\n'                 
             else:                
@@ -554,7 +953,8 @@ def file_r(name, pos):
             stringlist = f.readlines()
             return stringlist[int(pos)]
     except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
+        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_r wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))
+        
 
 def count_line(name):
      with open (name, 'r') as f:
@@ -569,212 +969,28 @@ def file_w(name, txt, pos):
             with open(name, 'r') as f:      
                 stringlist = f.readlines()
             #...ändern den passenden Index ab...
-            #-> Vorsicht: Index-Fehler bzgl. leerer Zeilen!
+            org_size = len(stringlist)    
+            while len(stringlist)<=pos:
+                stringlist.append('\n')
+                
+            stringlist[int(pos)]=txt+'\n'
             
-            #print('Schreibtest (vor-1): '+stringlist[int(pos-1)])
-            #print('Schreibtest (vor): '+stringlist[int(pos)])
-            #print('Schreibtest (vor+1): '+stringlist[int(pos+1)])
-            stringlist[int(pos)]=txt
-            #print('Schreibtest (nach-1): '+stringlist[int(pos-1)])
-            #print('Schreibtest (nach): '+stringlist[int(pos)])
-            #print('Schreibtest (nach+1): '+stringlist[int(pos+1)])
-            #...und schreiben sie wieder zurück
-            
-            with open(name, 'w') as f:      
+            with open(name, 'w') as f:
                 f.writelines(stringlist)
         else:
             with open(name, "a") as f:     
-                f.write('\n'+txt)
+                f.write(txt+'\n')
     except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
+        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_w wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))
 
 
-
-
-#Bekommt eine Liste bzgl. der Packages aus einer Config, liefert die package spec
-def get_spec(cfg_list,bench):
-    if bench is 'osu':
-        bench='osu-micro-benchmarks'
-    spec = bench    
-    for _ in cfg_list:      
-        _ = _.split('[')
-        if len(_[0]) > 0:
-            _[0]=_[0].rstrip()            
-            if _[1].find('Version')!=-1:
-                spec = spec+'@'
-            elif _[1].find('Compiler')!=-1:
-                spec = spec+'%'
-            else:
-                spec=spec+'^'                
-            spec=spec+_[0] 
-    return spec
-
-#Liefert alle Specs einer Config-Liste bzw. eines Benchmarktyps
-#Erhält Benchmarkname und (optional) Liste mit Config-Namen
-def get_all_specs(bench,cfgs='all'):
-    expr=[]
-    for s in cfg_profiles[tag_id_switcher(bench)]:
-        if cfgs=='all' or s[0][0] in cfgs:
-            expr.append(s[0][3])    
-    return expr
-
-#Braucht einen Pfad zum 
-def get_cfg(bench):
-    global cfg_profiles
-    names = get_cfg_names(get_cfg_path(bench), bench)
-    sublist = []
-    spec_ = [] #Hilfsvariable zum Ermitteln des specs    
-    id = tag_id_switcher(bench)    
-    #l-te Configzeile (int), p für Profil (string)
-    for p in names:
-        abschnitt = 1
-        line_=1        
-        while file_r(get_cfg_path(bench)+p,line_):                        
-            line = file_r(get_cfg_path(bench)+p,line_)
-            line_+=1            
-            if line.find('------')!=-1:
-                if len(sublist)>0: 
-                    cfg_profiles[id][names.index(p)][abschnitt] = sublist
-                    if abschnitt==1 and len(spec_)>0:                        
-                        spec = get_spec(spec_,bench)
-                        spec_ = []
-                    abschnitt+=1
-                    sublist = []                    
-                continue            
-            else:
-                if (id != misc_id or line[0:5]!='[Pfad'):
-                    sublist.append(config_cut(line))
-                if abschnitt==1 and id != misc_id:
-                    spec_.append(line) #get_spec benötigt die ganze Zeile der config 
-                    
-        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat
-        if len(sublist)>0:            
-            cfg_profiles[id][names.index(p)][abschnitt]=sublist 
-            sublist=[]
-        if id != misc_id:
-            cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec),spec]  
-        print('...')  
 
 """
 Funktionen die HPL zuzuordnen sind
 """
 
-        
-#Funktion schreibt HPL-Abschnitt aus dem Config-Profil in eine HPL.dat (beide Pfade notwendig)
-def set_data_hpl(cfg, pth):
-    print('DBG: set_data_hpl hat die File gefunden -> '+str(os.path.isfile(pth+'HPL.dat')))
-    #Überschreiben mit Offeset (erst ab Index 13 geht der HPL Abschnitt in der Config los)
-    #Auskommentiert bis Schreibfunktion gefixt ist <--- TODO
-    """
-    if (os.path.isfile(pth+'HPL.dat'))==True:
-        for _ in range(2,30):
-            file_w(pth+'HPL.dat',file_r(cfg,_+11),_)
-    """
-
-#Hiermit soll das Skript gebaut werden
-#Welche Parameter wären sinnvoll? <---- TODO 
-def build_hpl(id, bin, spec):
-    if (os.path.isfile('sc.sh'))==False:
-        shell('touch sc.sh') 
-    file_w('sc.sh','#!/bin/bash','a')
-    #file_w('sc.sh','#SBATCH --partition={}'.format(par),'a')
-    file_w('sc.sh','#SBATCH --partition=vl-parcio','a')
-    file_w('sc.sh','#SBATCH -N 2','a')
-    file_w('sc.sh','#SBATCH --mem=4000M','a')
-    file_w('sc.sh','#SBATCH --cpus-per-task=4','a')
-    #Sinnvoller Jobname <--- TODO: evtl. Zeit, id? etc.
-    #file_w('sc.sh','#SBATCH -J HPL-Benchmark[{}][{}]'.format(str(id), str(datetime.datetime.now())),'a')
-    file_w('sc.sh','#SBATCH --job-name=hpl-test','a')
-    #Info %j sollte zur ID (Zuw. des Jobs von SLURM, *nicht* config) und x% zum Namen ausgewertet werden! 
-    file_w('sc.sh','#SBATCH -o %x.out','a')
-    file_w('sc.sh','#SBATCH -e %x.err','a')
-    file_w('sc.sh','\n','a')
-    file_w('sc.sh','source ~/spack/share/spack/setup-env.sh','a')
-    
-    #Welche Packages müssen geladen werden?
-    module = (spec.replace('^',' ')).split()
-    for _ in range(0,len(module)):
-        file_w('sc.sh', 'spack load {}'.format(module[_]),'a')
-    
-    #Ist das wirklich notwendig für den Zugriff auf HPL.dat? <---- TODO
-    #Tipp: Flag prüfen für HPL.dat Verzeichnis
-    file_w('sc.sh','cd {}'.format(bin),'a')
-    
-    file_w('sc.sh','mpirun -np 8 {}/xhpl'.format(bin),'a')
-
 """
-#Hiermit soll das Skript ausgeführt werden
-def hpl_run(id):
-
-    #Welches Profil wird benutzt?
-    cfg = hpl_cfg_pth+'hpl_cfg_{}.txt'.format(str(id))
-    
-    #Was ist das spec?
-    spec = get_spec(cfg,'hpl')
-    _ = spec.find('^')
-    spec_short = (spec[:_]).strip()
-    
-    #Was ist der Pfad zur Binary & HPL.dat?
-    pth = shell(spack_binary+' find --paths '+spec_short)
-    _ = pth.find('/home')
-    pth = ((pth[_:]).strip()+'/bin')
-    
-    #Sind die entsprechenden Module überhaupt verfügbar? (Grafik Schritt 1)
-    #<--- TODO: Funktion die das prüft, wenn nein, dann melden!
-    #UPDATE: evtl. das Prüfen auslagern...
-    
-    #Die passende HPL.dat muss angepasst werden! (Grafik Schritt 2)
-    set_data_hpl(cfg, pth)
-    
-    #Jetzt soll das Skript gebaut werden (Grafik Schritt 3)
-    print('\n\nbuild_hpl({},{},{}\n\n)'.format(cfg, pth, spec))
-    build_hpl(id, pth, spec)
-
-#TODO Möglichkeit ein bzw. alle Profile laufen lassen
-"""
-
-"""
-#Handling der übergebenen Argumente
-#Aus dem zweiten Argument der -r Flag wird eine Liste aufbereitet
-def hpl_preparation(farg):
-    if farg == 'all':
-        hpl_run(get_cfg_names(hpl_cfg_pth, 'hpl'))
-    else:
-        names = farg.split(',')
-        for e in names:
-            _ = str(e).find('-')
-            #Umwandeln von Bindestrichnotation zu konkreten Zahlen: 3-5 -> 3 4 5
-            if _!=-1:
-                #Hinweis zum Slicen: string[a:b] <=> mit Index a aber ohne Index b
-                #Hinweis zu range(x,y): Inkl. Index x aber kleiner Index y
-                for i in range(int(e[:_]),int(e[_+1:])+1):
-                    names.append(i)
-                #Eintrag abgearbeitet
-                del names[names.index(e)]
-        for e in names:
-            names[names.index(e)] = 'hpl_cfg_'+str(e)+'.txt'
-        hpl_run(names)
-"""
-
-#Erwartet: Argumentliste zu -r/-i und der Benchname (String)
-def farg_to_list(farg, bench):
-    names = farg.split(',')
-    for e in names:
-        _ = str(e).find('-')
-        #Umwandeln von Bindestrichnotation zu konkreten Zahlen: 3-5 -> 3 4 5
-        if _!=-1:
-            #Hinweis zum Slicen: string[a:b] <=> mit Index a aber ohne Index b
-            #Hinweis zu range(x,y): Inkl. Index x aber kleiner Index y
-            for i in range(int(e[:_]),int(e[_+1:])+1):
-                names.append(i)
-            #Eintrag abgearbeitet
-            del names[names.index(e)]
-    for e in names:
-        #print('farg-to-list:'+str(names[names.index(e)]))
-        names[names.index(e)] = bench+'_cfg_'+str(e)+'.txt'
-    return names
-    
-#Default Argument <=> wir wollen alle Benchmarks laufen lassen
+#Default Argument <=> wir wollen alle Profile laufen lassen
 def hpl_run(farg = 'all'):
 
     #Vorschlag: Überarbeitung der Menü-Ausgabe, vll über eine globale String-Variable, das würde simultane Menü und Flag-Nutzung erlauben
@@ -812,28 +1028,13 @@ def hpl_run(farg = 'all'):
     for profile in selected_profiles:
         menutxt+='Ausgewählt: '+profile[0][0]+'\n'
     
-    return menutxt
-    
     #Prüfe ob alle verfügbar sind, breche sonst ab TODO
     
-    #Lasse eine Funktion daraus ein Skript bauen
+    #Skriptbau
+    menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, hpl_id)
     
-    #Lass das Skript laufen
-    
-    #return 'noch nicht implementiert...'
-
+    return menutxt
 """
-Funktionen die OSU zuzuordnen sind
-""" 
-""" 
-def run_osu(test,cfgs=all):
-    if cfgs!='all':
-        cfgs=farg_to_list(cfgs,'osu')
-    nodes=2
-    
-    for s in cfg_profiles[osu_id]:
-"""        
-
 
 #Startpunkt
 clear()
