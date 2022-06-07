@@ -69,7 +69,7 @@ def cl_arg():
     get_cfg('hpl') 
     get_cfg('misc')
     #Hilfestellung
-    code_eval(config_out(hpl_id))
+    config_out(hpl_id)
    
     args= parser.parse_args()
     
@@ -167,6 +167,7 @@ def check_dirs():
         shell('touch '+hpl_cfg_pth+'hpl_cfg_d.txt')
         initm = initm+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
 
+"""
 #Liest die Profile aus den lokalen Configs aus
 def get_cfg(bench):
     global cfg_profiles
@@ -203,8 +204,43 @@ def get_cfg(bench):
         if id != misc_id:
             cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec),spec]  
         print('...')  
-
-
+"""
+    
+def get_cfg(bench):
+    global cfg_profiles
+    names = get_cfg_names(get_cfg_path(bench), bench)
+    sublist, spec_ = [], []
+    id = tag_id_switcher(bench)
+    #Für jedes Profil...
+    for p in names:
+        abschnitt = 1
+        txtfile = open(get_cfg_path(bench)+p, 'r')
+        txtlist = txtfile.readlines()
+        #...jede Zeile passend einsortieren!
+        for ln in txtlist:
+            #Eine Reguläre Zeile wird in der Subliste gesammelt
+            if (ln.find('-----')==-1) and (ln.find('[Pfad')==-1):
+                sublist.append(config_cut(ln))
+                if abschnitt==1:
+                    spec_.append(ln)
+            #Eine Trennzeile löst die Eingliederung eines gefüllten Blocks aus
+            elif (len(sublist)>0) and (ln.find('-----')>-1):
+                cfg_profiles[id][names.index(p)][abschnitt]=sublist
+                abschnitt+=1
+                sublist=[]
+                continue
+            #Eine folgende Trennzeile macht gar nichts
+            else:
+                continue                   
+        #Normale Profile brauchen auch noch Metadaten
+        if id != misc_id:
+            spec = get_spec(spec_,bench)
+            cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]  
+        #Letzter Block & Resett der Variablen
+        cfg_profiles[id][names.index(p)][abschnitt]=sublist
+        sublist, spec_, spec = [], [], '' 
+        print('...') 
+        txtfile.close()
 
 """
 Debug- & Hilfs-Funktionen
@@ -234,10 +270,11 @@ def shell(cmd):
         #.stdout liefert einen Binärstring desw. die Dekodierung
         return p.stdout.decode('UTF-8')
     except Exception as exc:
-        error_log(' {} [Exception]'.format(type(exc).__name__))
+        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nshell wurde aufgerufen aus: '+str(inspect.stack()[1][3]))
 
 #Wertet einen Python-Ausdruck aus
 def code_eval(expr):
+    #Auskommentiert für volle Fehlermeldungen
     """
     try:
         return eval(expr)
@@ -312,9 +349,6 @@ def config_out(bench_id):
     for p in cfg_profiles[bench_id]:
         #Metadaten
         s += 'Profil: '+p[0][0]+'\n'
-        if (p[0][1]!='')and(p[0][2]!=''):
-            s += 'Configpfad: '+p[0][1]+'\n'
-            s += 'Zielpfad: '+p[0][2]+'\n'
         #Abschnitte der Profile
         for b in range(0,len(p)):
             s += '->Block: '+str(b)+'\n'
@@ -358,11 +392,18 @@ def get_target_path(spec):
     else:
         pth = shell(spack_binary+' find --paths '+spec[:spec.find('^')])
     _ = pth.find('/home')
-    return ((pth[_:]).strip()+'/bin')
+    r = (pth[_:]).strip()
+    if r!='':
+        return r+'/bin'
+    else:
+        error_log('Ein Pfad für '+spec[:spec.find('^')]+' konnte nicht gefunden werden!')
+        return 'Kein Pfad gefunden!'
 
 
 #Überschreibt die Zeilen von s_line (int) bis inkl. e_line (int) von file1 nach (ggf. mit Offset) file2
-def transfer_lines(fpath_1, fpath_2, s_line = 0, e_line = sum(1 for line in open(fpath_1)), offset = 0):
+def transfer_lines(fpath_1, fpath_2, s_line = 0, e_line = -1, offset = 0):
+    if e_line==-1:
+        e_line = sum(1 for line in open(fpath_1))
     for _ in range(s_line,e_line+1):
         file_w(fpath_2,file_r(fpath_1,_),_+offset)
 
@@ -451,9 +492,57 @@ def find_binary(profile, bench_id):
 Skriptbau-Funktionen
 """
 
+#Default Argument <=> wir wollen alle Profile laufen lassen
+def bench_run(bench_id, farg = 'all', extra_args = ''):
+
+    #Vorschlag: Überarbeitung der Menü-Ausgabe, vll über eine globale String-Variable, das würde simultane Menü und Flag-Nutzung erlauben
+    #z.B. global menutxt und in der menu-Fkt das printen immer über diese globale Variable
+    #Falls das überhaupt nötig ist...
+    menutxt, tag, pth = '', tag_id_switcher(bench_id), get_cfg_path(tag)
+    
+    #Aufarbeitung des Argumentstrings
+    if farg == 'all':
+        names = get_cfg_names(pth, tag)
+    else:
+        names = farg_to_list(farg, tag)
+    
+    #Die Liste der Namen der verfügbaren Profile
+    avail_names = get_cfg_names(pth, tag)
+    #Die Liste der Namen der nicht verfügbaren Profile
+    unavail_names = []
+    
+    #Die Liste der geladenen Profile aus dem Config-Ordner
+    selected_profiles = cfg_profiles[bench_id]
+    #Namen von verfügbaren aber nicht ausgewählten Profilnamen
+    unselected_names = []
+    
+    for profile in selected_profiles:
+        #profile[0][0] <=> Wir schauen in den Metadaten nach dem Profilnamen
+        if profile[0][0] not in names:
+            #Aussortieren, falls der Name nicht unter den übergebenen Namen ist
+            del selected_profiles[selected_profiles.index(profile)]
+            unselected_names.append(profile[0][0])
+    for name in names:
+        if name not in avail_names:
+            error_log('Profil: '+name+' war nicht verfügbar!')
+            menutxt+='Profil: '+name+' war nicht verfügbar!'+'\n'
+            unavail_names.append(name)
+    for profile in selected_profiles:
+        menutxt+='Ausgewählt: '+profile[0][0]+'\n'
+    
+    #Prüfe ob alle verfügbar sind, breche sonst ab TODO
+    
+    #Skriptbau
+    if extra_args!='':
+        menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, bench_id, extra_args)
+    else:
+        menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, bench_id)
+    
+    return menutxt
+
 #Hiermit soll das Skript gebaut werden
 #Welche Parameter wären sinnvoll? <---- TODO 
-def build_batch(selected_profiles, bench_id):
+def build_batch(selected_profiles, bench_id, extra_args = ''):
     
     tag = tag_id_switcher(bench_id)
     
@@ -486,13 +575,16 @@ def build_batch(selected_profiles, bench_id):
             #Anpassung z.B. für den Fall: versch. Profile benutzen gleiches hpl package mit untersch. HPL.dat Parametern
             #hpl_handler_pth muss noch per Funktion definiert werden! <-- TODO
             batchtxt+='python3 '+hpl_handler_xpth+' '+profile[0][1]+' '+profile[0][2]+'\n'
-        batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir)
+        if extra_args!='':
+            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir, extra_args)
+        elif len(extra_args)==0:
+            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir)
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
     file_w(run_dir+'{}.sh'.format(tag+'_run'+'['+tstamp+']'),batchtxt,'a')
     return run_dir+'{}.sh'.format(tag+'_run'+'['+tstamp+']')
 
-def build_job(profile, bench_id, run_dir, res_dir):
+def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
 
     #Manche Dinge werden direkt ermittelt...
     proc_count = eval_proc_count(profile)
@@ -550,8 +642,8 @@ def build_job(profile, bench_id, run_dir, res_dir):
     
     jobtxt+='\n'
     
-    #Ausführung
-    jobtxt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path)
+    #Skriptzeile in der eine Binary ausgeführt wird
+    jobtxt+=execute_line(bench_id, bin_path, proc_count, extra_args)
     
     #TODO: Entladen von Modulen, nötig? Das ist ja ein abgeschlossenes Jobscript...
     #
@@ -828,7 +920,8 @@ def file_r(name, pos):
             stringlist = f.readlines()
             return stringlist[int(pos)]
     except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
+        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_r wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))
+        
 
 def count_line(name):
      with open (name, 'r') as f:
@@ -860,7 +953,7 @@ def file_w(name, txt, pos):
             with open(name, "a") as f:     
                 f.write('\n'+txt)
     except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
+        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_w wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))
 
 
 
@@ -868,6 +961,7 @@ def file_w(name, txt, pos):
 Funktionen die HPL zuzuordnen sind
 """
 
+"""
 #Default Argument <=> wir wollen alle Profile laufen lassen
 def hpl_run(farg = 'all'):
 
@@ -912,6 +1006,15 @@ def hpl_run(farg = 'all'):
     menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, hpl_id)
     
     return menutxt
+"""
+
+def execute_line(bench_id, bin_path, proc_count, extra_args):
+    txt = ''
+    if bench_id==hpl_id:
+        txt = 'mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path)
+    elif bench_id==osu_id:
+        txt = 'unklar...'
+    return txt
 
 #Startpunkt
 clear()
