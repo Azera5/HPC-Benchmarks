@@ -352,10 +352,13 @@ def get_cfg_path(bench):
 
 #Zielpfad zu Binary&HPL.dat
 def get_target_path(spec):
+    """
     if(spec.find('^')==-1):
         pth = shell(spack_binary+' find --paths '+spec)
     else:
         pth = shell(spack_binary+' find --paths '+spec[:spec.find('^')])
+    """
+    pth = shell(spack_binary+' find --paths '+spec)
     _ = pth.find('/home')
     r = (pth[_:]).strip()
     if r!='':
@@ -444,16 +447,17 @@ def eval_proc_count(profile):
                 continue
 
 def find_binary(profile, bench_id):
+    """
     #Primärpackage isolieren
     _ = profile[0][3].find('^')
     spec_short = (profile[0][3][:_]).strip()
-    
+    """
     if True:
-        bin_path = shell(spack_binary+' find --paths '+spec_short)
+        bin_path = shell(spack_binary+' find --paths '+profile[0][3])
         #Die Benchmarks sollten vom home-Verzeichnis aus erreichbar sein... <-- TODO: klären ob das den Anforderungen entspricht
         _ = bin_path.find('/home')
         if _ == -1:
-            error_log('Das Benchmark-Package {} ist (zumindest lokal) nicht aufzufinden! Profil: '.format(spec_short)+profile[0][0])
+            error_log('Das Benchmark-Package {} ist (zumindest lokal) nicht aufzufinden! Profil: '.format(profile[0][3])+profile[0][0])
         else:
             bin_path = ((bin_path[_:]).strip()+'/bin/')
     return bin_path
@@ -503,7 +507,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     
     #Entfernung der unerwünschten Profile
     for i in dlist:
-        del selected_profiles[i]    
+        del selected_profiles[i] 
     
     for name in names:
         if name not in avail_names:
@@ -559,7 +563,7 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     for profile in selected_profiles:    
         if bench_id == hpl_id:
             #Anpassung z.B. für den Fall: versch. Profile benutzen gleiches hpl package mit untersch. HPL.dat Parametern
-            print(profile[0][2])
+            #print(profile[0][2])
             if profile[0][2]!='Kein Pfad gefunden!':
                 batchtxt+='python3 '+hpl_handler_xpth+' '+profile[0][1]+' '+profile[0][2]+'\n'
             else:
@@ -663,12 +667,10 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
     return run_dir+'{}.sh'.format(profile[0][0][:-4])
 
 def execute_line(bench_id, bin_path, proc_count, node_count, extra_args,output):
-    txt = ''
-    print(bench_id)
+    txt = ''    
     if bench_id==hpl_id:
         txt+='cd {}'.format(bin_path)+'\n' #<--- TODO: schöner lösen?
-        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path,out=output)
-        print(txt)
+        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path,out=output)        
     elif bench_id==osu_id:
         txt+='mpirun -n {ncount} osu_{exargs}'.format(ncount=node_count,exargs=extra_args,out=output)
     return txt
@@ -929,6 +931,9 @@ def osu_menu():
             print('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')
             clear()            
         opt = str(input_format())
+
+
+
 """
 Allgemeine I/O Funktionen
 """
@@ -970,58 +975,6 @@ def file_w(name, txt, pos):
     except Exception as exc:     
         error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_w wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))
 
-
-
-"""
-Funktionen die HPL zuzuordnen sind
-"""
-
-"""
-#Default Argument <=> wir wollen alle Profile laufen lassen
-def hpl_run(farg = 'all'):
-
-    #Vorschlag: Überarbeitung der Menü-Ausgabe, vll über eine globale String-Variable, das würde simultane Menü und Flag-Nutzung erlauben
-    #z.B. global menutxt und in der menu-Fkt das printen immer über diese globale Variable
-    #Falls das überhaupt nötig ist...
-    menutxt=''
-
-    #Aufarbeitung des Argumentstrings
-    if farg == 'all':
-        names = get_cfg_names(hpl_cfg_pth, 'hpl')
-    else:
-        names = farg_to_list(farg, 'hpl')
-    
-    #Die Liste der Namen der verfügbaren Profile
-    avail_names = get_cfg_names(hpl_cfg_pth, 'hpl')
-    #Die Liste der Namen der nicht verfügbaren Profile
-    unavail_names = []
-    
-    #Die Liste der geladenen Profile aus dem Config-Ordner
-    selected_profiles = cfg_profiles[hpl_id]
-    #Namen von verfügbaren aber nicht ausgewählten Profilnamen
-    unselected_names = []
-    
-    for profile in selected_profiles:
-        #profile[0][0] <=> Wir schauen in den Metadaten nach dem Profilnamen
-        if profile[0][0] not in names:
-            #Aussortieren, falls der Name nicht unter den übergebenen Namen ist
-            del selected_profiles[selected_profiles.index(profile)]
-            unselected_names.append(profile[0][0])
-    for name in names:
-        if name not in avail_names:
-            error_log('Profil: '+name+' war nicht verfügbar!')
-            menutxt+='Profil: '+name+' war nicht verfügbar!'+'\n'
-            unavail_names.append(name)
-    for profile in selected_profiles:
-        menutxt+='Ausgewählt: '+profile[0][0]+'\n'
-    
-    #Prüfe ob alle verfügbar sind, breche sonst ab TODO
-    
-    #Skriptbau
-    menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, hpl_id)
-    
-    return menutxt
-"""
 
 #Startpunkt
 clear()
