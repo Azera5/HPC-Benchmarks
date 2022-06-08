@@ -96,7 +96,7 @@ def cl_arg():
     
     #Run Benchmarks
     if args.run:
-        if len(args.run)>2 or (args.run[1]!='all' and args.run[0]!='osu') :
+        if len(args.run)>2 or (args.run[0]!='osu' and args.run[1]!='all') :
             #print(bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1]))
             print('\n'+shell('sbatch '+bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1])))
         else:
@@ -168,45 +168,9 @@ def check_dirs():
         initm = initm+'default Config für HPL: \'hpl_cfg_d.txt\' erstellt ...\n'
     """
 
-"""
+
+
 #Liest die Profile aus den lokalen Configs aus
-def get_cfg(bench):
-    global cfg_profiles
-    names = get_cfg_names(get_cfg_path(bench), bench)
-    sublist = []
-    spec_ = [] #Hilfsvariable zum Ermitteln des specs    
-    id = tag_id_switcher(bench)    
-    #l-te Configzeile (int), p für Profil (string)
-    for p in names:
-        abschnitt = 1
-        line_=1        
-        while file_r(get_cfg_path(bench)+p,line_):                        
-            line = file_r(get_cfg_path(bench)+p,line_)
-            line_+=1            
-            if line.find('------')!=-1:
-                if len(sublist)>0: 
-                    cfg_profiles[id][names.index(p)][abschnitt] = sublist
-                    if abschnitt==1 and len(spec_)>0:                        
-                        spec = get_spec(spec_,bench)
-                        spec_ = []
-                    abschnitt+=1
-                    sublist = []                    
-                continue            
-            else:
-                if (id != misc_id or line[0:5]!='[Pfad'):
-                    sublist.append(config_cut(line))
-                if abschnitt==1 and id != misc_id:
-                    spec_.append(line) #get_spec benötigt die ganze Zeile der config 
-                    
-        #Ersteintrag ist nur Platzhalter für Metadaten: Name, Configpfad, Zielpfad zu Binary&HPL.dat
-        if len(sublist)>0:            
-            cfg_profiles[id][names.index(p)][abschnitt]=sublist 
-            sublist=[]
-        if id != misc_id:
-            cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec),spec]  
-        print('...')  
-"""
-    
 def get_cfg(bench):
     global cfg_profiles
     names = get_cfg_names(get_cfg_path(bench), bench)
@@ -525,14 +489,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     selected_profiles = cfg_profiles[bench_id]
     #Namen von verfügbaren aber nicht ausgewählten Profilnamen
     unselected_names = []
-    """
-    for profile in selected_profiles:
-        #profile[0][0] <=> Wir schauen in den Metadaten nach dem Profilnamen
-        if profile[0][0] not in names:
-            #Aussortieren, falls der Name nicht unter den übergebenen Namen ist
-            del selected_profiles[selected_profiles.index(profile)]
-            unselected_names.append(profile[0][0])
-    """
+
     #Indizes der zu entfernenden Profile
     dlist=[]
     
@@ -602,9 +559,9 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     for profile in selected_profiles:    
         if bench_id == hpl_id:
             #Anpassung z.B. für den Fall: versch. Profile benutzen gleiches hpl package mit untersch. HPL.dat Parametern
-            #hpl_handler_pth muss noch per Funktion definiert werden! <-- TODO
+            print(profile[0][2])
             if profile[0][2]!='Kein Pfad gefunden!':
-                batchtxt+='python3 '+hpl_handler_xpth+'.py'+' '+profile[0][1]+' '+profile[0][2]+'\n'
+                batchtxt+='python3 '+hpl_handler_xpth+' '+profile[0][1]+' '+profile[0][2]+'\n'
             else:
                 #Wenn der Ort der Binary nicht klar ist, soll auch kein Jobscript gebaut werden...
                 continue
@@ -667,7 +624,7 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
     jobtxt+='#SBATCH --job-name={}\n'.format(profile[0][0][:-4])
     #Ziel für Output (sollte in (...)[results] landen)
     if profile[3][10]=='':
-        jobtxt+='#SBATCH --output={}\n'.format(res_dir+profile[0][0][:-4]+'.out')
+        jobtxt+='#SBATCH --output={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.out')
     else:
         jobtxt+='#SBATCH --job-name={}\n'.format(profile[3][10])
     #Ziel für Fehler (sollte in (...)[results] landen)
@@ -707,11 +664,13 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
 
 def execute_line(bench_id, bin_path, proc_count, node_count, extra_args,output):
     txt = ''
+    print(bench_id)
     if bench_id==hpl_id:
         txt+='cd {}'.format(bin_path)+'\n' #<--- TODO: schöner lösen?
-        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path)
+        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path,out=output)
+        print(txt)
     elif bench_id==osu_id:
-        txt+='mpirun -n {ncount} osu_{exargs} > {out}'.format(ncount=node_count,exargs=extra_args,out=output)
+        txt+='mpirun -n {ncount} osu_{exargs}'.format(ncount=node_count,exargs=extra_args,out=output)
     return txt
 
 
