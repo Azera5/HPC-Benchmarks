@@ -840,10 +840,9 @@ def install_spec(expr):
         file_w('install.sh',str(specs),'a')
         user=shell('echo $USER')
         #info = shell('squeue -u '+user)
-        error_log(info)
-        #shell('sbatch install.sh')
-        time.sleep(0.5)
-        print('Installation läuft:\n'+info)
+        #error_log(info)
+        print(shell('sbatch install.sh'))        
+        #print('Installation läuft:\n')
                 
     else:
         return print('Bereits alles installiert!')
