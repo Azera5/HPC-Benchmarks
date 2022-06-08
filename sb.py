@@ -931,6 +931,9 @@ def osu_menu():
             print('Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1')
             clear()            
         opt = str(input_format())
+
+
+
 """
 Allgemeine I/O Funktionen
 """
