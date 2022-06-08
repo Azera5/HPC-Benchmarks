@@ -20,7 +20,7 @@ hpl_cfg_pth = ''
 osu_cfg_pth = ''
 misc_cfg_pth= ''
 spack_binary = ''
-hpl_handler_xpth = 'hpl_dat_handler'
+hpl_handler_xpth = ''
 
 
 """
@@ -57,10 +57,10 @@ def cl_arg():
     'hpl <cfg>,<cfg>,...,<cfg>\n'+     
     '     z.B.: -r hpl 1,3-4,Test1\n' +
     '           -r hpl all <=> -r hpl\n\n' +
-    'osu <Test> <cfg>,<cfg>,...,<cfg>\n'+
+    'osu <cfg>,<cfg>,...,<cfg> <Test> \n'+
     '     Tests:{latency, bw, bcast, barrier, allreduce}\n'+
-    '     z.B.: -r osu latency 1,3-4,Test1\n'+
-    '           -r osu latency all <=> -r osu latency\n') 
+    '     z.B.: -r osu 1,3-4,Test1 latency\n'+
+    '           -r osu all latency <=> -r osu latency\n') 
  
     print('laden ...')
     find_paths()
@@ -96,16 +96,12 @@ def cl_arg():
     
     #Run Benchmarks
     if args.run:
-        if len(args.run)<2 or (len(args.run)<3 and args.run[0]=='osu'):
-            print('Zu wenig Argumente:\n'+
-            'HPL (2): -r [hpl] [cfg]\n'+
-            'OSU (3): -r [osu] [test] [cfg]')
-        elif args.run[0]=='hpl':
-            print('#TODO hpl-run')
-            #hpl_run(args.run[1])
-        elif args.run[0]=='osu':
-            print('#TODO osu-run')
-            #osu_run(args.run[1],args.run[2])           
+        if len(args.run)>2 or (args.run[1]!='all' and args.run[0]!='osu') :
+            #print(bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1]))
+            print('\n'+shell('sbatch '+bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1])))
+        else:
+            #print(bench_run(tag_id_switcher(args.run[0]),'all',args.run[len(args.run)-1]))            
+            print('\n'+shell('sbatch '+bench_run(tag_id_switcher(args.run[0]),'all',args.run[len(args.run)-1])))
     
      
     #Start via Menu   
@@ -120,7 +116,7 @@ Wichtige Vorlauf-Funktionen
 
 #Ermittelt Pfade relevanter Verzeichnisse und Binaries, wenn nichts spezifiziert wurde
 def find_paths():
-    global hpl_cfg_pth, osu_cfg_pth, spack_binary,misc_cfg_pth  
+    global hpl_cfg_pth, osu_cfg_pth, spack_binary,misc_cfg_pth, hpl_handler_xpth  
     #An der Stelle, an der das Programm ausgeführt wird, sollten auch die configs sein
     if hpl_cfg_pth=='':
         hpl_cfg_pth = str(shell('pwd')+'/config/hpl/').replace('\n','').strip()
@@ -128,10 +124,12 @@ def find_paths():
         osu_cfg_pth = str(shell('pwd')+'/config/osu/').replace('\n','').strip()
     if misc_cfg_pth=='':
         misc_cfg_pth = str(shell('pwd')+'/config/').replace('\n','').strip()    
+    if hpl_handler_xpth=='':
+        hpl_handler_xpth = str(shell('pwd')+'/hpl_dat_handler.py').replace('\n','').strip()    
     if spack_binary=='':
         r_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()
         #Wir nehmen die erstbeste spack Binary, wenn nichts per Hand spezifiziert wurde
-        spack_binary = r_list[0].strip()
+        spack_binary = r_list[0].strip()        
 
 def check_data():
     global cfg_profiles
@@ -446,12 +444,14 @@ def eval_partition(profile):
                 continue
 
 #Falls keine Nodezahl spezifiziert ist, erst mal Benchunabhängig
-def eval_node_count(profile):
+def eval_node_count(profile):    
     if profile[3][1]!='':
         if profile[3][2]!='' and profile[3][3]!='':
-            if profile[3][1]<math.ceil(int(profile[3][2])/int(profile[3][3])):
+            if int(profile[3][1])<math.ceil(int(profile[3][2])/int(profile[3][3])):
                 error_log('Nodezahl unstimmig bzgl. Prozess-&task-per-node-Zahl im Profil: '+profile[0][0])
-        else:
+            else:
+                return profile[3][1]
+        else:            
             return profile[3][1]
     elif profile[3][2]!='' and profile[3][3]!='':
         #z.B. 7 Prozesse, 3 task per node -> Aufrundung von 7/3 -> 3 Nodes allokieren
@@ -484,7 +484,7 @@ def find_binary(profile, bench_id):
     _ = profile[0][3].find('^')
     spec_short = (profile[0][3][:_]).strip()
     
-    if bench_id == hpl_id:
+    if True:
         bin_path = shell(spack_binary+' find --paths '+spec_short)
         #Die Benchmarks sollten vom home-Verzeichnis aus erreichbar sein... <-- TODO: klären ob das den Anforderungen entspricht
         _ = bin_path.find('/home')
@@ -525,13 +525,29 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     selected_profiles = cfg_profiles[bench_id]
     #Namen von verfügbaren aber nicht ausgewählten Profilnamen
     unselected_names = []
-    
+    """
     for profile in selected_profiles:
         #profile[0][0] <=> Wir schauen in den Metadaten nach dem Profilnamen
         if profile[0][0] not in names:
             #Aussortieren, falls der Name nicht unter den übergebenen Namen ist
             del selected_profiles[selected_profiles.index(profile)]
             unselected_names.append(profile[0][0])
+    """
+    #Indizes der zu entfernenden Profile
+    dlist=[]
+    
+    for i in range(len(selected_profiles)):
+        #Der Profilname ist nicht in der Liste der zu nutzenden Profile dabei...
+        if selected_profiles[i][0][0] not in names:
+            #...also vormerken zum Entfernen
+            dlist.append(i)
+            unselected_names.append(selected_profiles[i][0][0])
+    dlist.reverse()
+    
+    #Entfernung der unerwünschten Profile
+    for i in dlist:
+        del selected_profiles[i]    
+    
     for name in names:
         if name not in avail_names:
             error_log('Profil: '+name+' war nicht verfügbar!')
@@ -540,20 +556,22 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     for profile in selected_profiles:
         menutxt+='Ausgewählt: '+profile[0][0]+'\n'
     
-    #Prüfe ob alle verfügbar sind, breche sonst ab TODO
-    
+    #Prüfe ob alle verfügbar sind, breche sonst ab TODO    
     #Skriptbau, ggf. mit zusätzlichen Argumenten
     if extra_args!='':
-        menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, bench_id, extra_args)
+        skript=build_batch(selected_profiles, bench_id, extra_args)
+        menutxt+='...an srun würde übergeben werden: '+skript
     else:
-        menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, bench_id)
+        skript=build_batch(selected_profiles, bench_id)
+        menutxt+='...an srun würde übergeben werden: '+skript    
     
-    return menutxt
+    #shell('sbatch '+skript)
+    return skript
 
 #Hiermit soll das Skript gebaut werden
 #Welche Parameter wären sinnvoll? <---- TODO 
-def build_batch(selected_profiles, bench_id, extra_args = ''):
-    
+def build_batch(selected_profiles, bench_id, extra_args = ''):    
+    first_job=True
     tag = tag_id_switcher(bench_id)
     
     batchtxt='#!/bin/bash\n'
@@ -563,17 +581,17 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     #Namen der Auftragsordner
     run_dir = 'projects/'+tag+'_'+'['+tstamp+']'+'_'+'[run]/'
     res_dir = 'projects/'+tag+'_'+'['+tstamp+']'+'_'+'[results]/'
-    print(run_dir)
-    print(res_dir)
+    #print(run_dir)
+    #print(res_dir)
     
     #Erst mal statisch & Minimalallokation
     #An dieser Stelle sollten später aus den allgemeinen Metadaten die Allokationsparameter ausgelesen werden <-- TODO
     batchtxt+='#SBATCH --partition=vl-parcio\n'
-    batchtxt+='#SBATCH --begin=now+120\n'
+    batchtxt+='#SBATCH --begin=now\n'
     batchtxt+='#SBATCH --nodes=1\n'
     batchtxt+='#SBATCH --job-name='+tag+'_run'+'['+tstamp+']'+'\n'
     batchtxt+='#SBATCH --output='+run_dir+tag+'_run'+'['+tstamp+']'+'.out'+'\n'
-    batchtxt+='#SBATCH --error='+run_dir+tag+'_run'+'['+tstamp+']'+'.err'+'\n'
+    batchtxt+='#SBATCH --error='+run_dir+tag+'_run'+'['+tstamp+']'+'.err'+'\n\n'
     
     if os.path.isdir(run_dir[:-1])==False:     
         shell('mkdir -p '+run_dir[:-1])
@@ -581,7 +599,7 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
         shell('mkdir -p '+res_dir[:-1])
     
     #Einzelne Jobskripte je Profil
-    for profile in selected_profiles:
+    for profile in selected_profiles:    
         if bench_id == hpl_id:
             #Anpassung z.B. für den Fall: versch. Profile benutzen gleiches hpl package mit untersch. HPL.dat Parametern
             #hpl_handler_pth muss noch per Funktion definiert werden! <-- TODO
@@ -590,13 +608,21 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
             else:
                 #Wenn der Ort der Binary nicht klar ist, soll auch kein Jobscript gebaut werden...
                 continue
+        
+        #Der erste Job kann direkt loslegen, die folgenden müssen auf den Abschluss der Vorgänger warten
+        if first_job:
+            first_job=False
+            batchtxt+='id'+str(selected_profiles.index(profile))+'=$(sbatch '            
+        else:
+            batchtxt+='id'+str(selected_profiles.index(profile))+'=$(sbatch --dependency=afterany:${id'+str(selected_profiles.index(profile)-1)+'##* } '
+        
         if extra_args!='':
-            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir, extra_args)+'\n'
+            batchtxt+=build_job(profile, bench_id, run_dir, res_dir, extra_args)+')\n'
         elif len(extra_args)==0:
-            batchtxt+='srun '+build_job(profile, bench_id, run_dir, res_dir)+'\n'
+            batchtxt+=build_job(profile, bench_id, run_dir, res_dir)+')\n'         
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
-    file_w(run_dir+'{}.sh'.format(tag+'_run_batchscript'),batchtxt,'a')
+    file_w(run_dir+'{}.sh'.format(tag+'_run_batchscript'),batchtxt,'a')    
     return run_dir+'{}.sh'.format(tag+'_run_batchscript')
 
 def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
@@ -604,19 +630,20 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
     #Manche Dinge werden direkt ermittelt...
     proc_count = eval_proc_count(profile)
     bin_path = find_binary(profile, bench_id)
-
+    node_count = eval_node_count(profile)
+    
     #Shebang
     jobtxt='#!/bin/bash\n'
     #Partition per Funktion (ggf. Usereingabe)
     jobtxt+='#SBATCH --partition={}\n'.format(eval_partition(profile)) 
-    #Nodezahl wird per Funktion bestimmt aus tasks per node und der Prozessanzahl
-    jobtxt+='#SBATCH --nodes={}\n'.format(eval_node_count(profile))
+    #Nodezahl wird per Funktion bestimmt aus tasks per node und der Prozessanzahl    
+    jobtxt+='#SBATCH --nodes={}\n'.format(node_count)
     """
     #Anzahl der Prozesse
     jobtxt+='#SBATCH --ntasks={}\n'.format(proc_count)
     """
     #Anzahl der Prozesse pro Node
-    if profile[3][3]!='':
+    if profile[3][3]!='':       
         jobtxt+='#SBATCH --ntasks-per-node={}\n'.format(profile[3][3])
     #Anzahl der CPUs pro Task/Prozess(default lt. SLURM-Doku: 1 Kern per Task)
     if profile[3][4]!='':
@@ -640,7 +667,7 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
     jobtxt+='#SBATCH --job-name={}\n'.format(profile[0][0][:-4])
     #Ziel für Output (sollte in (...)[results] landen)
     if profile[3][10]=='':
-        jobtxt+='#SBATCH --output={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.out')
+        jobtxt+='#SBATCH --output={}\n'.format(res_dir+profile[0][0][:-4]+'.out')
     else:
         jobtxt+='#SBATCH --job-name={}\n'.format(profile[3][10])
     #Ziel für Fehler (sollte in (...)[results] landen)
@@ -652,8 +679,8 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
     
     jobtxt+='\n'
     
-    #Sourcen von spack <--- TODO: verallgemeinern für bel. Pfade
-    jobtxt+='source {}/share/spack/setup-env.sh'.format(spack_binary[:-4])
+    #Sourcen von spack <--- TODO: verallgemeinern für bel. Pfade   
+    jobtxt+='source {}/share/spack/setup-env.sh\n'.format(spack_binary[:-9])
     
     #Laden der passenden Module
     """
@@ -667,7 +694,7 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
     jobtxt+='\n'
     
     #Skriptzeile in der eine Binary ausgeführt wird
-    jobtxt+=execute_line(bench_id, bin_path, proc_count, extra_args)
+    jobtxt+=execute_line(bench_id, bin_path, proc_count,node_count, extra_args,res_dir+profile[0][0][:-4]+'.out')
     
     #TODO: Entladen von Modulen, nötig? Das ist ja ein abgeschlossenes Jobscript...
     #
@@ -675,15 +702,16 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
     if os.path.isdir(run_dir[:-1])==True:
         file_w(run_dir+'{}.sh'.format(profile[0][0][:-4]),jobtxt,'a')
+        shell('chmod +x '+run_dir+'{}.sh'.format(profile[0][0][:-4]))
     return run_dir+'{}.sh'.format(profile[0][0][:-4])
 
-def execute_line(bench_id, bin_path, proc_count, extra_args):
+def execute_line(bench_id, bin_path, proc_count, node_count, extra_args,output):
     txt = ''
     if bench_id==hpl_id:
         txt+='cd {}'.format(bin_path)+'\n' #<--- TODO: schöner lösen?
         txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path)
     elif bench_id==osu_id:
-        txt+='unklar...' #<--- TODO; extra_args sind für flags etc.
+        txt+='mpirun -n {ncount} osu_{exargs} > {out}'.format(ncount=node_count,exargs=extra_args,out=output)
     return txt
 
 
@@ -850,7 +878,7 @@ def install_spec(expr):
     if specs is not '':
         file_w('install.sh',str(specs),'a')
         user=shell('echo $USER')
-        info = shell('squeue -u '+user)
+        #info = shell('squeue -u '+user)
         error_log(info)
         #shell('sbatch install.sh')
         time.sleep(0.5)
