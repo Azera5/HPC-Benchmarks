@@ -973,58 +973,6 @@ def file_w(name, txt, pos):
         error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_w wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))
 
 
-
-"""
-Funktionen die HPL zuzuordnen sind
-"""
-
-"""
-#Default Argument <=> wir wollen alle Profile laufen lassen
-def hpl_run(farg = 'all'):
-
-    #Vorschlag: Überarbeitung der Menü-Ausgabe, vll über eine globale String-Variable, das würde simultane Menü und Flag-Nutzung erlauben
-    #z.B. global menutxt und in der menu-Fkt das printen immer über diese globale Variable
-    #Falls das überhaupt nötig ist...
-    menutxt=''
-
-    #Aufarbeitung des Argumentstrings
-    if farg == 'all':
-        names = get_cfg_names(hpl_cfg_pth, 'hpl')
-    else:
-        names = farg_to_list(farg, 'hpl')
-    
-    #Die Liste der Namen der verfügbaren Profile
-    avail_names = get_cfg_names(hpl_cfg_pth, 'hpl')
-    #Die Liste der Namen der nicht verfügbaren Profile
-    unavail_names = []
-    
-    #Die Liste der geladenen Profile aus dem Config-Ordner
-    selected_profiles = cfg_profiles[hpl_id]
-    #Namen von verfügbaren aber nicht ausgewählten Profilnamen
-    unselected_names = []
-    
-    for profile in selected_profiles:
-        #profile[0][0] <=> Wir schauen in den Metadaten nach dem Profilnamen
-        if profile[0][0] not in names:
-            #Aussortieren, falls der Name nicht unter den übergebenen Namen ist
-            del selected_profiles[selected_profiles.index(profile)]
-            unselected_names.append(profile[0][0])
-    for name in names:
-        if name not in avail_names:
-            error_log('Profil: '+name+' war nicht verfügbar!')
-            menutxt+='Profil: '+name+' war nicht verfügbar!'+'\n'
-            unavail_names.append(name)
-    for profile in selected_profiles:
-        menutxt+='Ausgewählt: '+profile[0][0]+'\n'
-    
-    #Prüfe ob alle verfügbar sind, breche sonst ab TODO
-    
-    #Skriptbau
-    menutxt+='...an srun würde übergeben werden: '+build_batch(selected_profiles, hpl_id)
-    
-    return menutxt
-"""
-
 #Startpunkt
 clear()
 cl_arg()
