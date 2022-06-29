@@ -9,6 +9,7 @@ import math
 import fnmatch
 import re
 import argparse
+from os.path import exists 
 from argparse import RawTextHelpFormatter
 
 #Für das Debugging
@@ -32,6 +33,9 @@ loc = ''
 #Binary-Pfade zu relevanten Programmen
 spack_xpth = ''
 hpl_handler_xpth = ''
+
+#Python Version für matplotlib (z.B. python%gcc@8.5.0)
+python_matplotlib = ''
 
 #Pfade zu den Benchmarks (Index <=> Benchmark-ID; Ersteintrag führt zur allg. config!)
 bench_pths = []
@@ -173,7 +177,9 @@ def cl_arg():
                 expr+=get_all_specs(tag_id_switcher(id))   
         
         #Nur bestimmte Benchmarks werden installiert
-        else:           
+        #TODO nur bestimmte Profile laden
+        else:
+            get_cfg(args.install[0])
             #Nur bestimmte Profile werden installiert
             if len(args.install)>2 and args.install[1]!= 'all':
                 names=farg_to_list(args.install[1],args.install[0])
@@ -187,14 +193,16 @@ def cl_arg():
     
     #Run Benchmarks
     if args.run:
+        #TODO nur nötige Profile Laden!
+        #TODO -r hpl -> ohne (all) fixen
         if len(args.run)>2 or (args.run[0]!='osu' and args.run[1]!='all'):
-            get_cfg(tag_id_switcher(args.run[0]))
-            #print(bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1]))
-            print('\n'+shell('sbatch '+bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1])))
+            get_cfg(args.run[0])
+            pth=bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1])            
+            print(shell(str('sbatch '+pth[:pth.find('.sh')+3])))
         else:
-            get_cfg(tag_id_switcher(args.run[0]))
-            #print(bench_run(tag_id_switcher(args.run[0]),'all',args.run[len(args.run)-1]))            
-            print('\n'+shell('sbatch '+bench_run(tag_id_switcher(args.run[0]),'all',args.run[len(args.run)-1])))
+            get_cfg(args.run[0])                       
+            pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[len(args.run)-1])           
+            print(shell(str('sbatch '+pth[:pth.find('.sh')+3])))
       
     #Start via Menu   
     if not args.install and not args.run:
@@ -318,7 +326,10 @@ def get_cfg(bench):
     timestart = time.time()
     global cfg_profiles
     print('\nlade {}'.format(bench))
+    #print(bench)
+    #print(get_cfg_path(bench))
     names = get_cfg_names(get_cfg_path(bench), bench)
+    #print(str(bench)+' :'+str(names))
     sublist, spec_ = [], []
     id = tag_id_switcher(bench)
     #Für jedes Profil...
@@ -363,7 +374,36 @@ def save_times():
     file_w('mem.txt','check_dirs[{}]'.format(str(check_dirs.time)),c-2)
     file_w('mem.txt','get_cfg[{}]'.format(str(get_cfg.time)),c-1) 
 
-    
+#Sucht Matplotlib (installiert falls nicht Vorhanden)
+def find_matplot_python_hash():
+    pth_spack=spack_xpth[:spack_xpth.find('spack')+5]
+    pth=shell('find {} -name matplotlib'.format(pth_spack))
+   
+    #Kein matplotlib installiert 
+    if pth=='':
+        sourcen='source {}/share/spack/setup-env.sh; '.format(spack_xpth[:-9])
+        py=shell('find '+pth_spack+' -name python | grep bin').split('\n')
+        count=len(py)-1
+        #Eine Pythonversion vorhanden
+        if  count==1:
+            print(shell(sourcen+'spack load python; python -m pip install matplotlib'))
+            return ''
+            
+        #Mehrere Pythonversionen vorhanden
+        #py in Form von: spack/opt/spack/linux-centos8-zen3/gcc-12.1.0/python-3.9.12-6ewjgugumhth6r56gvjxhdtq6tvowln7/bin/python 
+        #Wir brauchen den hash: 6ewjgugumhth6r56gvjxhdtq6tvowln7
+        else:
+            py=py[0][py[0].find('python-')+7:py[0].find('/bin')]
+            py_hash=py[py.find('-')+1:]
+            print(shell(sourcen+'spack load python /'+py_hash+'; python -m pip install matplotlib'))
+            return '/'+py_hash
+            
+    #Matplotlib ist installiert 
+    #Pfad- bzw. Hashsuche
+    pth=pth[pth.find('python'):].replace('-','',1)
+    pth=pth[pth.find('-')+1:pth.find('/')]
+    return '/'+pth
+   
 """
 Debug- & Hilfs-Funktionen
 """
@@ -503,7 +543,9 @@ def clear():
 #Bug: Liefert z.T. auch Verzeichnisse! <--- TODO
 #Liefert Files, keine Verz.; Erwartet Pfade in der Form /dir1/dir2/.../
 def get_names(pth):
+    #print(pth)
     r = os.listdir(pth)
+    #print(r)
     for _ in r:
         if os.path.isdir(_)==True:
             print(FCOL[8]+'gelöschter Pfad ->>>'+_+FEND)
@@ -521,15 +563,15 @@ def get_dirs(pth):
     return r
 
 #Liefert Textfiles eines bestimmten Typs (z.B. hpl_cfg_(...).txt)
-def get_cfg_names(pth, type):
-    if type == 'misc':
+def get_cfg_names(pth, typ):
+    if typ == 'misc':
         return ['config.txt']
     else:
-        return fnmatch.filter(get_names(pth), type+'_cfg_*.txt')
+        return fnmatch.filter(get_names(pth), str(typ)+'_cfg_*.txt')
 
 #Bekommt eine Liste bzgl. der Packages aus einer Config, liefert die package spec
 def get_spec(cfg_list,bench):
-    if bench is 'osu':
+    if bench == 'osu':
         bench='osu-micro-benchmarks'
     spec = bench    
     for _ in cfg_list:      
@@ -542,7 +584,7 @@ def get_spec(cfg_list,bench):
                 spec = spec+'%'
             else:
                 spec=spec+'^'                
-            spec=spec+_[0] 
+            spec=spec+_[0]    
     return spec
 
 #Liefert alle Specs einer Config-Liste bzw. eines Benchmarktyps
@@ -590,11 +632,11 @@ def tag_id_switcher(bench):
 
 #Configpfad
 def get_cfg_path(bench):
-    if bench is 'hpl':
+    if bench == 'hpl':
         return bench_pths[hpl_id]
-    if bench is 'osu':
+    if bench == 'osu':
         return bench_pths[osu_id]
-    if bench is 'misc':
+    if bench == 'misc':
         return bench_pths[misc_id]
     else:
         return -1 
@@ -898,7 +940,6 @@ Skriptbau-Funktionen
 
 #Default Argument <=> wir wollen alle Profile laufen lassen
 def bench_run(bench_id, farg = 'all', extra_args = ''):
-
     #Vorschlag: Überarbeitung der Menü-Ausgabe, vll über eine globale String-Variable, das würde simultane Menü und Flag-Nutzung erlauben
     #z.B. global menutxt und in der menu-Fkt das printen immer über diese globale Variable
     #Falls das überhaupt nötig ist...
@@ -917,7 +958,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     unavail_names = []
     
     #Die Liste der geladenen Profile aus dem Config-Ordner
-    selected_profiles = cfg_profiles[bench_id].copy()
+    selected_profiles = cfg_profiles[bench_id].copy()    
     #Namen von verfügbaren aber nicht ausgewählten Profilnamen
     unselected_names = []
 
@@ -998,17 +1039,26 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
         if extra_args!='':
             batchtxt+=build_job(profile, bench_id, run_dir, res_dir, extra_args)+')\n'
         elif len(extra_args)==0:
-            batchtxt+=build_job(profile, bench_id, run_dir, res_dir)+')\n'         
+            batchtxt+=build_job(profile, bench_id, run_dir, res_dir)+')\n'        
+    
+    batchtxt+='source {}/share/spack/setup-env.sh\n'.format(spack_xpth[:-9])
+    batchtxt+='spack load python '+find_matplot_python_hash()+'\n'
+    batchtxt+='sbatch --dependency=afterany:${id'+str(len(selected_profiles)-1)+'##* } ' + build_plot(tstamp,tag_id_switcher(bench_id),run_dir)
+    #batchtxt+='sbatch --dependency=afterany:${id'+str(len(selected_profiles)-1)+'##* } python3 plot.py '+tstamp+' '+tag_id_switcher(bench_id) 
+    
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
-    file_w(run_dir+'{}.sh'.format(tag+'_run_batchscript'),batchtxt,'a')    
-    return run_dir+'{}.sh'.format(tag+'_run_batchscript')
+    file_w(run_dir+'{}.sh'.format(tag+'_run_batchscript'),batchtxt,'a')
+    shell('chmod +x '+run_dir+'{}.sh'.format(tag+'_run_batchscript'))    
+    return run_dir+'{}.sh'.format(tag+'_run_batchscript')    
 
 def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
 
     #Manche Dinge werden direkt ermittelt...
-    bin_path = find_binary(profile, bench_id)
-    
+    if bench_id != osu_id:
+        bin_path = find_binary(profile, bench_id)        
+    else:
+        bin_path = ''
     #Im vierten Config-Block eines Profils steht potentiell ein händisch gebautes Skript     
     if len(profile[4])==0:
         jobtxt=write_slurm_params(profile, 'jobskript')
@@ -1029,7 +1079,7 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
         #Skriptzeile in der eine Binary ausgeführt wird
         jobtxt+=execute_line(bench_id, bin_path, profile[3][1], profile[3][2], extra_args, res_dir+profile[0][0][:-4]+'.out')
         #TODO: Entladen von Modulen, nötig? Das ist ja ein abgeschlossenes Jobscript...
-        jobtxt+= 'spack unload {}\n'.format(profile[0][3])
+        #jobtxt+= 'spack unload {}\n'.format(profile[0][3])
     else:
         jobtxt=''
         for i in range(len(profile[4])):
@@ -1051,12 +1101,22 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output)
         txt+='mpirun -n {ncount} osu_{exargs}'.format(ncount=node_count,exargs=extra_args,out=output)
     return txt
 
-
+def build_plot(tstamp, bench,run_dir):
+    jobtxt=write_slurm_params(cfg_profiles[0][0], 'plotskript')
+    jobtxt+='#SBATCH --job-name='+bench+'_plot\n' 
+    jobtxt+='#SBATCH --error='+run_dir+bench+'_plot.err\n\n'    
+    jobtxt+= 'python3 plot.py '+tstamp+' '+bench
+    
+    #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
+    if os.path.isdir(run_dir[:-1])==True:
+        file_w(run_dir+bench+'{}.sh'.format('_plotskript'),jobtxt,'a')
+        shell('chmod +x '+run_dir+bench+'{}.sh'.format('_plotskript'))
+    return run_dir+bench+'{}.sh'.format('_plotskript')
 
 """
 Installation
 """
-
+""
 def view_installed_specs(name=0):
     try:
         if name==0:
@@ -1068,7 +1128,7 @@ def view_installed_specs(name=0):
     except Exception as exc:
         error_log(' {} [Exception]'.format(type(exc).__name__)+'\nspec:'+str(name))
 
-#Prüft Installationsausdruck auf grobe Syntaxfehler
+#Prüft Specausdruck auf grobe Syntaxfehler
 def check_expr_syn(expr):
     expr_list=['@%','%@','^%','%^','^@','@^']
     """
@@ -1088,141 +1148,52 @@ def check_expr_syn(expr):
             return False
     return True
 
-#Überprüft ob ein einzelner spec (Name + Version) existiert
-def check_spec(name,version=-1):
-    try:        
-        out = shell('spack info '+str(name))
-        #Falls keine Version vorhanden
-        if version == -1:
-            if out.find('Error')== -1:
-                return True 
-        elif out.find(version) != -1:
-            return True         
-        return False
-    
-    except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__))
 
-#Prüft ob Installationsausdruck gültig ist (alle Specs)
-def check_expr(expr):
-    if check_expr_syn(expr):
-        arr = expr.split('^')        
-        for spec in arr:
-            s=spec.split('%')            
-            
-            #Untersuchung von einzelnem Package und Version
-            for _ in s:            
-                if _[0][:0]=='@':
-                    #print('Name fehlt!')
-                    #Package Name fehlt
-                    return False               
-                
-                _=_.split('@')                
-                if len(_) > 1:
-                    if not check_spec(_[0],_[1]):                   
-                        error_log(_[0]+'@'+_[1]+' existiert nicht')
-                        #Version existiert nicht
-                        return False
-                else:
-                    if not check_spec(_[0]):
-                        #Package existiert nicht
-                        error_log(_[0]+' existiert nicht')
-                        return False
-       
-        return True
-    #Syntaxfehler im Ausdruck
-    return False
-
-#Entfernt bereits installierte specs aus Installationsausdruck
-def remove_installed_spec(expr):
-    arr=expr.split('^')    
-    all_specs=view_installed_specs()
-    out=''
-    for _ in arr:        
-        if all_specs.find(_)==-1 and out.find(_)==-1:
-            out=out+'^'+_
-    if out!='':        
-        return out[1:]
-    else:
-        return out
-
-#Entfernt redundante Specs, erhält eine Liste aus [spec^spec^...^spec][...] Ausdrücken
-def remove_redudant_specs(expr):
-    spec_list=[]    
-    for list in expr:
-        for _ in list.split('^'):
-            insert=True
-            for spec_ in spec_list:
-                if _ in spec_:
-                    insert=False
-            if insert:
-                spec_list.append('^'+_)
-            
-    for _ in spec_list:
-        spec_list[spec_list.index(_)]=_[1:]    
-    return spec_list
-              
 #Schreibt Script zum installieren der specs 
-#TODO: Auslagern der Slurmparameter                    
-def install_spec(expr):
-    #Entfernt unnötig redundate Specs
-    #expr=remove_redudant_specs(expr)
-    partition=cfg_profiles[0][0][2][0]
-    node=cfg_profiles[0][0][2][1]
-    task=cfg_profiles[0][0][2][2]
-    cpus=cfg_profiles[0][0][2][3]
-    #Check ob angegebene Partition existiert
-    if shell('sinfo -h -p '+partition).find(partition)==-1:
-        print('Partition: '+partition+' existiert nicht')
-        return error_log('Partition: '+partition+' existiert nicht')  
-    
-    slurm=''
-    specs=''
-    #Holt sich max. CPU Anzahl der Partition
-    #cpus=shell('sinfo -h -p '+partition+' -o "%c"').split('+')[0]
-    #Falls install.sh nicht existiert wird es erstellt und Ausführbar gemacht
-    if (os.path.isfile('install.sh'))==False: 
-            shell('touch install.sh')
-            shell('chmod +x install.sh')
-            file_w('install.sh','','a')
+#Übergibt alle benötigen Argumente an Install.py
+#TODO dynamischer Pfad
+def install_spec(expr):  
+    #Slurmparameter 
+    meta=cfg_profiles[0][0][2][0]+'#'+cfg_profiles[0][0][2][1]+'#'+cfg_profiles[0][0][2][2]+'#'+cfg_profiles[0][0][2][3]+'#'+spack_xpth[:-9]   
+    expr_=''
+    timer=0
+    #String aller Specs
+    for e in expr:
+        expr_+=e+'#'            
+   
+    #Erstellt Batchscript zum Starten der Installation
+    if (os.path.isfile('start_install.sh'))==False: 
+            shell('touch start_install.sh')
+            shell('chmod +x start_install.sh')
+            file_w('start_install.sh','','a')
     else:
         #Clear install.sh
-        shell('echo a > install.sh')    
+        shell('echo a > start_install.sh')   
     
     #Slurmparameter für die Installation
     slurm='#!/bin/bash\n' \
-    +'#SBATCH --nodes='+node+'\n' \
-    +'#SBATCH --ntasks='+task+'\n' \
-    +'#SBATCH --cpus-per-task='+cpus+'\n' \
-    +'#SBATCH --partition='+partition+'\n' \
-    +'#SBATCH --output=install.out\n' \
-    +'#SBATCH --error=install.err\n\n'   
-    file_w('install.sh',slurm,0)    
+    +'#SBATCH --nodes=1\n' \
+    +'#SBATCH --partition='+cfg_profiles[0][0][2][0]+'\n' \
+    +'#SBATCH --output=install.sh\n\n' \
+    +'source {}/share/spack/setup-env.sh\n\n'.format(spack_xpth[:-9])+'\n' \
+    +'python3 install.py '+meta+' '+expr_[:len(expr_)-1]   
     
-    for e in expr:
-        if check_expr(e):
-            #e=remove_installed_spec(e)            
-            if e != '':                    
-                specs=specs+'srun spack install '+e+'\n'                 
-            else:                
-                error_log(e+': Bereits installiert')
-                
-        else:
-            print('Installation abgebrochen: '+e+' existiert nicht!')
-            return error_log('Installation abgebrochen: '+e+' existiert nicht!')
-            
-    if specs is not '':
-        file_w('install.sh',str(specs),'a')
-        user=shell('echo $USER')
-        #info = shell('squeue -u '+user)
-        #error_log(info)
-        print(shell('sbatch install.sh'))        
-        #print('Installation läuft:\n')
-                
-    else:
-        return print('Bereits alles installiert!')
-         
-
+    file_w('start_install.sh',slurm,0)
+    shell('chmod +x start_install.sh')
+    shell('sbatch start_install.sh')
+    #shell('rm start_install.sh')
+    
+    
+    while exists('install.sh')==False or os.stat('install.sh').st_size==0: 
+        time.sleep(0.1)
+        timer+=1
+        if timer > 100:
+            print('timeout error')
+    shell('chmod +x install.sh')
+    print(shell('sbatch install.sh'))
+    
+    
+    
 
 """
 Menüfunktionen

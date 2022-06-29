@@ -1,0 +1,38 @@
+------------------Pfade------------------
+-----------Leereinträge werden-----------
+------------zum Start ergänzt------------
+-----------------------------------------
+[Pfad x]
+
+[Pfad y]
+
+------------------SLURM------------------
+-------Installations-Einstellungen-------
+-----------------------------------------
+vl-parcio						[Partition]
+1							[Nodes]
+1							[Prozesse]
+48							[Prozesse/Tasks per Node]
+							[CPUs pro Prozess/Task]
+							[RAM in MB]
+							[Startpunkt, YYYY-MM-DD HH:MM:SS]
+							[Zeitlimit, DD-HH:MM:SS]
+							[Email an User]
+							[Email-Trigger, z.B. END,FAIL,TIME_LIMIT_80]
+							[File, Output]
+							[File, Fehler]
+------------------SLURM------------------
+--------Batchskript-Einstellungen--------
+-----------------------------------------							
+vl-parcio						[Partition]
+1							[Nodes]
+1							[Prozesse]
+							[Prozesse/Tasks per Node]
+							[CPUs pro Prozess/Task]
+							[RAM in MB]
+							[Startpunkt, YYYY-MM-DD HH:MM:SS]
+							[Zeitlimit, DD-HH:MM:SS]
+							[Email an User]
+							[Email-Trigger, z.B. END,FAIL,TIME_LIMIT_80]
+							[File, Output]
+							[File, Fehler]
