@@ -29,19 +29,24 @@ def read_values(timestemp,bench):
         #Auslesen OSU (Results und Labels)
         if bench == 'osu':
             #Auslesen MPI-Implementierung
-            with open('configs/'+bench+'/'+os.path.basename(name).replace('.out', '.txt'),'r') as f:                
-                values[1][len(values[1])-1][2]='{} ({})'.format(f.readlines()[4].split()[0],name[name.rfind('\\')+5:-4])
+            with open('configs/'+bench+'/'+os.path.basename(name).replace('.out', '.txt'),'r') as f:
+                values[1][len(values[1])-1][2]='{} ({})'.format(f.readlines()[4].split()[0],name[name.rfind('/')+5:-5])
             
+            #Auslesen der Results
             for line in stringlist:
-                if stringlist.index(line) == 0:
+                #Abfangen leerer Zeile
+                if len(line) == 0:
                     continue
                 
-                #Achsen-Label Auslesen
-                elif stringlist.index(line) == 1:
-                    values[0]= line[2:].replace(' ',',',1).replace(' ','').replace('\n','').split(',')
-                    values[0].append(bench+' '+values[0][1])
+                #Titel Auslesen
+                elif line.find('# OSU MPI ')!=-1:
+                    values[0]=[line[line.find('# OSU MPI ')+10:-5]]
                 
-                #Results Auslesen
+                #Achsen-Label Auslesen                
+                elif line.find('#') != -1:                    
+                    values[0].extend([x.lstrip() for x in line[2:-1].split(' ',1)])                                     
+                
+                #Ergebnisse Auslesen
                 elif line[0].isdigit():                    
                     val = line.replace(' ',',',1).replace(' ','').split(',')
                     values[1][len(values[1])-1][0].append(float(val[0]))
@@ -58,8 +63,9 @@ def read_values(timestemp,bench):
             values[1][len(values[1])-1][1].append(val)
             
             #Achsen-Label
-            values[0]=['Gflops','','HPL Benchmark']
+            values[0]=['HPL Benchmark','Gflops','']
     
+    print(values[0])
     return values
 
 #Plotten der Results
@@ -85,9 +91,9 @@ def run_plot(timestemp,bench):
             plt.barh(v[2],v[1],label=v[2])
             fig.set_figwidth(10)     
  
-    plt.title(values[0][2])
-    plt.xlabel(values[0][0])
-    plt.ylabel(values[0][1])        
+    plt.title(values[0][0])
+    plt.xlabel(values[0][1])
+    plt.ylabel(values[0][2])        
 
     ax_scale()
     

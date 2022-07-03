@@ -1104,7 +1104,9 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output)
 def build_plot(tstamp, bench,run_dir):
     jobtxt=write_slurm_params(cfg_profiles[0][0], 'plotskript')
     jobtxt+='#SBATCH --job-name='+bench+'_plot\n' 
-    jobtxt+='#SBATCH --error='+run_dir+bench+'_plot.err\n\n'    
+    jobtxt+='#SBATCH --error='+run_dir+bench+'_plot.err\n\n'
+    jobtxt+='#SBATCH --output='+run_dir+'plot.out'+'\n'
+    jobtxt+='#SBATCH --error='+run_dir+'plot.err'+'\n\n'     
     jobtxt+= 'python3 plot.py '+tstamp+' '+bench
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
