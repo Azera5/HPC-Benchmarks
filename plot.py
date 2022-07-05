@@ -30,7 +30,7 @@ def read_values(timestemp,bench):
         if bench == 'osu':
             #Auslesen MPI-Implementierung
             with open('configs/'+bench+'/'+os.path.basename(name).replace('.out', '.txt'),'r') as f:
-                values[1][len(values[1])-1][2]='{} ({})'.format(f.readlines()[4].split()[0],name[name.rfind('/')+5:-5])
+                values[1][len(values[1])-1][2]='{} ({})'.format(f.readlines()[4].split()[0],name[name.rfind('/')+5:-4])
             
             #Auslesen der Results
             for line in stringlist:
