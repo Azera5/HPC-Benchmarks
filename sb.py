@@ -1024,7 +1024,7 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
             #Anpassung z.B. für den Fall: versch. Profile benutzen gleiches hpl package mit untersch. HPL.dat Parametern
             #print(profile[0][2])
             if profile[0][2]!='Kein Pfad gefunden!':
-                batchtxt+='python3 '+hpl_handler_xpth+' '+profile[0][1]+' '+profile[0][2]+'\n'
+                batchtxt+='python3 '+hpl_handler_xpth+' '+profile[0][1]+' '+profile[0][2]+'/\n'
             else:
                 #Wenn der Ort der Binary nicht klar ist, soll auch kein Jobscript gebaut werden...
                 continue
@@ -1183,14 +1183,15 @@ def install_spec(expr):
     file_w('start_install.sh',slurm,0)
     shell('chmod +x start_install.sh')
     shell('sbatch start_install.sh')
-    #shell('rm start_install.sh')
+    shell('rm start_install.sh')
     
-    
+    #Wartet bis install.sh erstellt und befüllt wurde
     while exists('install.sh')==False or os.stat('install.sh').st_size==0: 
-        time.sleep(0.1)
+        time.sleep(5)
         timer+=1
-        if timer > 100:
+        if timer > 120:
             print('timeout error')
+            return error_log('Installationsfehler!')
     shell('chmod +x install.sh')
     print(shell('sbatch install.sh'))
     

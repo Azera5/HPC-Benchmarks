@@ -55,17 +55,16 @@ def read_values(timestemp,bench):
         #Auslesen HPL (Results und Labels)        
         if bench == 'hpl':
             #Profilmerkmale (N,P,Q)
-            values[1][len(values[1])-1][2]='N {}\nP{}; Q{} ({})'.format(stringlist[18].split()[2],stringlist[21].split()[2],stringlist[22].split()[2],name[name.rfind('\\')+5:-4])                        
-            
+            values[1][len(values[1])-1][2]='N {}\nP{}; Q{} ({})'.format(stringlist[18].split()[2],stringlist[21].split()[2],stringlist[22].split()[2],name[name.rfind('/')+5:-4])                        
+           
             #Results
             val=float(stringlist[46].split()[6].replace('.',''))
             values[1][len(values[1])-1][0].append(float(profiles.index(name)))
             values[1][len(values[1])-1][1].append(val)
             
             #Achsen-Label
-            values[0]=['HPL Benchmark','Gflops','']
+            values[0]=['HPL Benchmark','Gflops','']    
     
-    print(values[0])
     return values
 
 #Plotten der Results

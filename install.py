@@ -29,7 +29,7 @@ def check_expr_syn(expr):
     for _ in expr_list:
         r=expr.find(_)        
         if r != -1:
-            print('Syntaxfehler an Position: '+str(r))
+            os.system('echo Syntaxfehler an Position: {} >> install.err'.format(str(r)))
             return False
     return True
 
@@ -84,7 +84,7 @@ def install_spec(expr):
     cpus=meta[3]
     #Check ob angegebene Partition existiert
     if shell('sinfo -h -p '+partition).find(partition)==-1:
-        return print('Partition: '+partition+' existiert nicht')        
+        return os.system('echo Partition: {} existiert nicht >> install.err'.format(str(partition)))         
         
     slurm=''
     specs=''  
@@ -98,22 +98,24 @@ def install_spec(expr):
     +'#SBATCH --output=install.out\n' \
     +'#SBATCH --error=install.err\n\n' \
     +'source {}/share/spack/setup-env.sh\n'.format(meta[4])
-
     
-    for e in expr:        
-        if check_expr(e)==True:                   
-            specs=specs+'srun spack install '+e+'\n'
+    for e in expr:
+        #Prüft ob breits identische spec installiert werden soll
+        if specs.find(e)==-1:            
+            #Prüft ob jeweils die einzelnen Komponenten der spec existieren
+            if check_expr(e)==True:                   
+                specs=specs+'srun spack install '+e+'\n'        
+        
+        #Dokumentieren des Fehlers
         else:
-            print('Installation abgebrochen: '+e+' existiert nicht!')
-            return -1 
+            os.system('echo {} existiert nicht >> install.err'.format(str(e)))
+            
     
-    print(slurm)
-    
-    if specs is not '':
-        print(specs)
-                
-    else:
-        return print('Bereits alles installiert!')
+    if len(specs)==0:
+        return os.system('echo bereits alles installiert >> install.err'.format(str(e)))                
+    else:        
+        return str(slurm+specs)
 
-#Run Installation 
-install_spec(expr)
+#Run Installation
+print(install_spec(expr)) 
+#os.system('echo {} > install.sh'.format(install_spec(expr)))
