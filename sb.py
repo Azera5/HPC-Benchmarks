@@ -197,12 +197,12 @@ def cl_arg():
         #TODO -r hpl -> ohne (all) fixen
         if len(args.run)>2 or (args.run[0]!='osu' and args.run[1]!='all'):
             get_cfg(args.run[0])
-            pth=bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1])            
-            print(shell(str('sbatch '+pth[:pth.find('.sh')+3])))
+            pth=bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1])           
+            print(shell(str('sbatch '+pth[pth.find('projects'):pth.find('.sh')+3])))
         else:
             get_cfg(args.run[0])                       
-            pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[len(args.run)-1])           
-            print(shell(str('sbatch '+pth[:pth.find('.sh')+3])))
+            pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[len(args.run)-1])            
+            print(shell(str('sbatch '+pth[pth.find('projects'):pth.find('.sh')+3])))
       
     #Start via Menu   
     if not args.install and not args.run:
@@ -1362,7 +1362,7 @@ def options_menu():
         elif opt == '5' or opt == 'show':
             i = 0
             txt=ml+FCOL[13]+FORM[0]+'which bench do you wish to inspect?'+FEND
-            txt+='\n\n'+ml+FBGR[0]+'possible choises:'+FEND+'\n'+ml
+            txt+='\n\n'+ml+FBGR[0]+'possible choices:'+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for id in bench_id_list:
                 if left_size<len(str(id)+' ('+tag_id_switcher(id)+')'+mr):
