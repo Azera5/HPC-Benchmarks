@@ -9,15 +9,18 @@ import sys
 timestemp=str(sys.argv[1])
 bench=str(sys.argv[2])
 
+#plot.py Path
+loc=str(os.path.dirname(os.path.abspath(__file__)))
+
 #Pfad zum Speichern des Plots
-path=glob.glob('projects/*'+timestemp+'*results*/*.out')[0]
+path=glob.glob('{}/projects/*'.format(loc)+timestemp+'*results*/*.out')[0]
 end=path.rfind(']')
 path=path[:end+1]
 
 #Auslesen der Results
 def read_values(timestemp,bench):
     values = [[],[]]
-    profiles = glob.glob('projects/*'+timestemp+'*results*/*.out')
+    profiles = glob.glob('{}/projects/*'.format(loc)+timestemp+'*results*/*.out')
     #Alle Results eines Timestemps abarbeiten
     for name in profiles:
         if os.stat(name).st_size == 0:
@@ -29,7 +32,7 @@ def read_values(timestemp,bench):
         #Auslesen OSU (Results und Labels)
         if bench == 'osu':
             #Auslesen MPI-Implementierung
-            with open('configs/'+bench+'/'+os.path.basename(name).replace('.out', '.txt'),'r') as f:
+            with open('{}/configs/'.format(loc)+bench+'/'+os.path.basename(name).replace('.out', '.txt'),'r') as f:
                 values[1][len(values[1])-1][2]='{} ({})'.format(f.readlines()[4].split()[0],name[name.rfind('/')+5:-4])
             
             #Auslesen der Results

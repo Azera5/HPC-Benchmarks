@@ -2,9 +2,9 @@
 -----------Leereinträge werden-----------
 ------------zum Start ergänzt------------
 -----------------------------------------
-[Pfad x]
+[spack path]
 
-[Pfad y]
+[results path]
 
 ------------------SLURM------------------
 -------Installations-Einstellungen-------

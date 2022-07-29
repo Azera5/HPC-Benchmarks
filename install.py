@@ -6,6 +6,9 @@ import re
 meta=sys.argv[1].split('#')
 expr=sys.argv[2].split('#')
 
+#plot.py Path
+loc=str(os.path.dirname(os.path.abspath(__file__)))
+
 #Shellfunktion aus sb.py (Hauptprogramm)
 def shell(cmd):
     #Ausgabe soll nicht direkt auf's Terminal
@@ -95,8 +98,8 @@ def install_spec(expr):
     +'#SBATCH --ntasks='+task+'\n' \
     +'#SBATCH --cpus-per-task='+cpus+'\n' \
     +'#SBATCH --partition='+partition+'\n' \
-    +'#SBATCH --output=install.out\n' \
-    +'#SBATCH --error=install.err\n\n' \
+    +'#SBATCH --output={}/install.out\n'.format(loc) \
+    +'#SBATCH --error={}/install.err\n\n'.format(loc) \
     +'source {}/share/spack/setup-env.sh\n'.format(meta[4])
     
     for e in expr:
@@ -116,6 +119,6 @@ def install_spec(expr):
     else:        
         return str(slurm+specs)
 
-#Run Installation
-print(install_spec(expr)) 
-#os.system('echo {} > install.sh'.format(install_spec(expr)))
+#Write install.sh
+with open('{}/install.sh'.format(loc),'w') as f:
+    f.write(install_spec(expr))

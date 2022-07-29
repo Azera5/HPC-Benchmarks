@@ -30,6 +30,9 @@ bench_id_list = [misc_id, hpl_id, osu_id]
 #Das Verzeichnis an dem das Programm ausgeführt wird (autogeneriert)
 loc = ''
 
+#Project Folder (Results and Run)
+project_pth=''
+
 #Binary-Pfade zu relevanten Programmen
 spack_xpth = ''
 hpl_handler_xpth = ''
@@ -139,30 +142,48 @@ test_list2 = [['aaaaaa'],['bbbbbb'],['ccccccc'],['dddddddd']]
 Command-Line-Parameter
 """
 def cl_arg():
-    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)    
+    global cfg_profiles
+    
+    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument('-i','--install',nargs='+',type=str,help=''+
     '<Benchmark> <cfg>,<cfg>,...,<cfg>\n'+
-    '     z.B.: -i hpl 1,3-4,Test1\n'+
-    'all: Installiert alle Benchmarks/cfg\n'+
-    '     z.B.: -i all\n\n'+
+    '     e.g.: -i hpl 1,3-4,example\n\n'+
+    'all: Install all benchmarks/cfg\n'+
+    '     e.g.: -i all\n'+
     '           -i osu all\n\n')
     
     parser.add_argument('-r','--run',nargs='+',type=str,help=''+   
     'hpl <cfg>,<cfg>,...,<cfg>\n'+     
-    '     z.B.: -r hpl 1,3-4,Test1\n' +
+    '     e.g.: -r hpl 1,3-4,Test1\n' +
     '           -r hpl all <=> -r hpl\n\n' +
-    'osu <cfg>,<cfg>,...,<cfg> <Test> \n'+
-    '     Tests:{latency, bw, bcast, barrier, allreduce}\n'+
-    '     z.B.: -r osu 1,3-4,Test1 latency\n'+
-    '           -r osu all latency <=> -r osu latency\n') 
+    'osu <test> <cfg>,<cfg>,...,<cfg> \n'+
+    '     tests:{latency, bw, bcast, barrier, allreduce}\n'+
+    '     e.g.: -r osu latency 1,3-4,example\n'+
+    '           -r osu latency all <=> -r osu latency\n')
+    
+    parser.add_argument('-c','--clean',nargs=1,type=str,help=''+
+    'projects: remove projects folder\n'+
+    'install: remove all install scripts\n'+
+    'log: remove log.txt (error-log file)\n' +
+    'mem: remove mem.txt (run time variables)\n'+
+    'all: remove projects, install scripts, log.txt and mem.txt\n'+
+    '     e.g.: -c projects\n'+
+    '     e.g.: -c all\n')
     
     evaluate_paths()
+    args= parser.parse_args()
+    
+    #Clean files
+    if args.clean:       
+        return  print(clean(args.clean[0]))
+    
     prepare_array()
     check_data()
-    check_dirs()
+    check_dirs()   
+    
     get_cfg(tag_id_switcher(misc_id))
    
-    args= parser.parse_args()
+
     
     #Install Benchmarks
     if args.install:        
@@ -176,36 +197,50 @@ def cl_arg():
                 get_cfg(tag_id_switcher(id))
                 expr+=get_all_specs(tag_id_switcher(id))   
         
-        #Nur bestimmte Benchmarks werden installiert
-        #TODO nur bestimmte Profile laden
-        else:
-            get_cfg(args.install[0])
+        #Nur bestimmte Benchmarks werden installiert    
+        else:            
             #Nur bestimmte Profile werden installiert
-            if len(args.install)>2 and args.install[1]!= 'all':
-                names=farg_to_list(args.install[1],args.install[0])
+            if len(args.install)>1 and args.install[1]!= 'all':
+                names=farg_to_list(args.install[1],args.install[0])                
+                get_cfg(args.install[1])
+                
                 for _ in names:
                     expr=get_all_specs(args.install[0],names)
+            
             #Alle Profile werden installiert
             else:
-                expr=get_all_specs(args.install[0])
-                
+                get_cfg(args.install[0],args.install[1])
+                expr=get_all_specs(args.install[0])                
         install_spec(expr)
     
     #Run Benchmarks
-    if args.run:
-        #TODO nur nötige Profile Laden!
-        #TODO -r hpl -> ohne (all) fixen
-        if len(args.run)>2 or (args.run[0]!='osu' and args.run[1]!='all'):
-            get_cfg(args.run[0])
-            pth=bench_run(tag_id_switcher(args.run[0]),args.run[1],args.run[len(args.run)-1])           
-            print(shell(str('sbatch '+pth[pth.find('projects'):pth.find('.sh')+3])))
-        else:
-            get_cfg(args.run[0])                       
-            pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[len(args.run)-1])            
-            print(shell(str('sbatch '+pth[pth.find('projects'):pth.find('.sh')+3])))
-      
+    if args.run:        
+        args_len=len(args.run)        
+        
+        #run hpl
+        if args.run[0]=='hpl':            
+            if args_len < 2 or args.run[1]=='all':
+                get_cfg(args.run[0])
+                pth=bench_run(tag_id_switcher(args.run[0]),'all')            
+                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+            else:
+                get_cfg(args.run[0],args.run[1])               
+                pth=bench_run(tag_id_switcher(args.run[0]),args.run[1])            
+                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+       
+        #run osu
+        if args.run[0]=='osu':
+            if args_len < 3 or args.run[2]=='all':
+                get_cfg(args.run[0])
+                pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[1])
+                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+            else:
+                get_cfg(args.run[0],args.run[2])
+                pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])
+                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+        
     #Start via Menu   
-    if not args.install and not args.run:
+    if not args.install and not args.run and not args.clean:
         for id in bench_id_list:
             if id==misc_id:
                 continue
@@ -222,10 +257,9 @@ Wichtige Vorlauf-Funktionen
 #Bestimmt die genutzten Pfade
 def evaluate_paths():
     timestart = time.time()
-    global initm, spack_xpth, hpl_handler_xpth, loc
-    
-    loc = str(shell('pwd')).replace('\n','').strip()
-    
+    global initm, spack_xpth, hpl_handler_xpth, loc, project_pth  
+         
+    loc = str(os.path.dirname(os.path.abspath(__file__)))
     #Vorbereitung der Pfad- & Info-Arrays (letztere nicht hier befüllt)
     for id in bench_id_list:
         bench_pths.append('empty')
@@ -241,16 +275,21 @@ def evaluate_paths():
         loadprogress()
 
     #Hier werden die statischen Pfade zu den Binaries (<<Name>>_xpath) bestimmt 
-    spack_xpth = str(file_r(bench_pths[misc_id]+'config.txt', 5))     
-    if 5>len(spack_xpth):
-        r_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()
+    spack_xpth = str(file_r(bench_pths[misc_id]+'config.txt', 4)).rstrip()
+    if check_path(spack_xpth)==False:
+        r_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()        
         #Wir nehmen die erstbeste spack Binary, wenn nichts per Hand spezifiziert wurde
         spack_xpth = r_list[0].strip()
+        file_w(bench_pths[misc_id]+'config.txt',spack_xpth,4)
         initm+='Da kein Verzeichnis zur spack Binary spezifiziert war, wurde das Erstbeste von ~/... aus genommen:\n'+spack_xpth+'\n' 
         
     #Hier kommen spezielle Pfade für verschiednste Teilaufgaben
     hpl_handler_xpth = loc+'/hpl_dat_handler.py'
     evaluate_paths.time+=time.time()-timestart
+    project_pth=str(file_r(bench_pths[misc_id]+'config.txt', 6)).rstrip()
+    if check_path(project_pth[:project_pth.find('/project')])==False:
+        project_pth=loc+'/projects'
+        file_w(bench_pths[misc_id]+'config.txt',project_pth,6)
 evaluate_paths.time=0
 
 #Vorbereitung des Arrays mit den Profildaten
@@ -276,11 +315,11 @@ prepare_array.time=0
 def check_data():
     timestart = time.time()
     loadprogress()
-    global initm, mr, ml, colour_support, refresh_intervall, form_factor_menu
-    if os.path.isfile('log.txt')==False:     
-        shell('touch log.txt')
+    global initm, mr, ml, colour_support, refresh_intervall, form_factor_menu ,loc
+    if os.path.isfile('{}/log.txt'.format(loc))==False:     
+        shell('touch {}/log.txt'.format(loc))
         initm+='Ein Errorlog (log.txt) wurde erstellt ...\n'
-    if os.path.isfile('mem.txt')==False:     
+    if os.path.isfile('{}/mem.txt'.format(loc))==False:     
         txt='---------Param. stehen in eckigen Klammern---------'
         txt+='\nform_factor_menu\t\t\t[3]'
         txt+='\nrefresh_intervall\t\t\t[0]'
@@ -294,7 +333,7 @@ def check_data():
         txt+='\ncheck_dirs\t\t\t[]'
         txt+='\nget_cfg\t\t\t[]'
         txt+='\ncreate_mem\t\t\t[]'
-        file_w('mem.txt', txt, 'a')
+        file_w('{}/mem.txt'.format(loc), txt, 'a')
         initm+='Ein Einstellungsarchiv (mem.txt) wurde erstellt ...\n'
     else:
         form_factor_menu = int(get_mem_digit(1))
@@ -322,16 +361,21 @@ def check_dirs():
 check_dirs.time=0
 
 #Liest die Profile aus den lokalen Configs aus
-def get_cfg(bench):
+def get_cfg(bench,farg='all'):
     timestart = time.time()
     global cfg_profiles
     print('\nlade {}'.format(bench))
-    #print(bench)
-    #print(get_cfg_path(bench))
-    names = get_cfg_names(get_cfg_path(bench), bench)
-    #print(str(bench)+' :'+str(names))
+    
     sublist, spec_ = [], []
     id = tag_id_switcher(bench)
+    
+    if farg=='all':
+        names = get_cfg_names(get_cfg_path(bench), bench)
+    else:
+        names = farg_to_list(farg,bench)
+        cfg_profiles[id]=cfg_profiles[id][:len(names)]
+    
+
     #Für jedes Profil...
     for p in names:
         abschnitt = 1
@@ -363,16 +407,16 @@ def get_cfg(bench):
         #Kleine Illustration des Ladestandes
         progressbar(names.index(p)+1, len(names))        
         txtfile.close()
-    get_cfg.time+=time.time()-timestart
+    get_cfg.time+=time.time()-timestart    
 get_cfg.time=0
 
 def save_times():
-    c = count_line('mem.txt')
-    file_w('mem.txt','evaluate_paths[{}]'.format(str(evaluate_paths.time)),c-5)
-    file_w('mem.txt','prepare_array[{}]'.format(str(prepare_array.time)),c-4)
-    file_w('mem.txt','check_data[{}]'.format(str(check_data.time)),c-3)
-    file_w('mem.txt','check_dirs[{}]'.format(str(check_dirs.time)),c-2)
-    file_w('mem.txt','get_cfg[{}]'.format(str(get_cfg.time)),c-1) 
+    c = count_line('{}/mem.txt'.format(loc))
+    file_w('{}/mem.txt'.format(loc),'evaluate_paths[{}]'.format(str(evaluate_paths.time)),c-5)
+    file_w('{}/mem.txt'.format(loc),'prepare_array[{}]'.format(str(prepare_array.time)),c-4)
+    file_w('{}/mem.txt'.format(loc),'check_data[{}]'.format(str(check_data.time)),c-3)
+    file_w('{}/mem.txt'.format(loc),'check_dirs[{}]'.format(str(check_dirs.time)),c-2)
+    file_w('{}/mem.txt'.format(loc),'get_cfg[{}]'.format(str(get_cfg.time)),c-1) 
 
 #Sucht Matplotlib (installiert falls nicht Vorhanden)
 def find_matplot_python_hash():
@@ -447,7 +491,7 @@ def error_log(txt):
     global errorstack
     t = time.localtime()
     txt = str(inspect.stack()[1][3])+' [Funktion] '+time.strftime("%d-%m-%Y---%H:%M:%S", t)+' [Zeitpunkt] '+txt+'\n'
-    file_w('log.txt', txt, 'a')
+    file_w('{}/log.txt'.format(loc), txt, 'a')
     errorstack.append(FCOL[15]+str(inspect.stack()[1][3])+FEND+' [Funktion] '+time.strftime("%d-%m-%Y---%H:%M:%S", t)+' [Zeitpunkt] '+txt+'\n')
 
 #Prüft ob der Fehlerstack leer ist
@@ -487,7 +531,7 @@ def shell(cmd):
     try:
         #Ausgabe soll nicht direkt auf's Terminal
         p = subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
-        if(p.returncode!=0 and dbg==True):
+        if(p.returncode==0 and dbg==True):
             error_log('{} used the subshell for >>'.format(str(inspect.stack()[1][3]))+cmd+'<< with a non zero return')
             #menutxt=ml+FCOL[15]+'{} used the subshell for >>'.format(str(inspect.stack()[1][3]))+cmd+'<< with a non zero return'+FEND
         #.stdout liefert einen Binärstring desw. die Dekodierung
@@ -691,7 +735,7 @@ def eval_partition(profile, name):
         else:
             continue
 
-def write_slurm_params(profile, type):
+def write_slurm_params(profile, type):    
     #Shebang
     txt='#!/bin/bash\n'
     #Partition
@@ -753,17 +797,17 @@ def clean(inpt = 'all'):
     pth = loc
     rtxt = ''
     if inpt=='log' or inpt=='all':
-        if os.path.isfile('log.txt')==False:
+        if os.path.isfile('{}/log.txt'.format(loc))==False:
             rtxt+=FCOL[6]+'there was no log-file to be found:\na new one was created!\n'+FEND
             shell('touch log.txt')
         else:
-            shell('rm log.txt')
-            shell('touch log.txt')   
+            shell('rm {}/log.txt'.format(loc))
+            shell('touch {}/log.txt'.format(loc))
     if inpt=='mem' or inpt=='all':
-        if os.path.isfile('mem.txt')==False:
+        if os.path.isfile('{}/mem.txt'.format(loc))==False:
             rtxt+=FCOL[6]+'there was no log-file to be found:\na new one was created!\n'+FEND
         else:
-            shell('rm mem.txt')
+            shell('rm {}/mem.txt'.format(loc))
         txt='---------Param. stehen in eckigen Klammern---------'
         txt+='\nform_factor_menu\t\t\t[3]'
         txt+='\nrefresh_intervall\t\t\t[0]'
@@ -777,7 +821,7 @@ def clean(inpt = 'all'):
         txt+='\ncheck_dirs\t\t\t[]'
         txt+='\nget_cfg\t\t\t[]'
         txt+='\ncreate_mem\t\t\t[]'
-        file_w('mem.txt', txt, 'a')
+        file_w('{}/mem.txt'.format(loc), txt, 'a')
         form_factor_menu = int(get_mem_digit(1))
         refresh_format_params()
         refresh_intervall = int(get_mem_digit(2))
@@ -789,6 +833,23 @@ def clean(inpt = 'all'):
             rtxt+=FCOL[6]+'there was no /projects directory to be found!\n'+FEND
         else:
             delete_dir(pth+'/projects')
+    
+    if inpt=='install' or inpt=='all':
+        if os.path.isfile(pth+'/install.sh')==False:
+            rtxt+=FCOL[6]+'there was no install.sh to be found\n'+FEND
+        else:
+             shell('rm {}/install.sh'.format(loc))
+        
+        if os.path.isfile(pth+'/install.err')==False:
+            rtxt+=FCOL[6]+'there was no install.err to be found\n'+FEND
+        else:
+             shell('rm {}/install.err'.format(loc))
+        
+        if os.path.isfile(pth+'/install.out')==False:
+            rtxt+=FCOL[6]+'there was no install.out to be found\n'+FEND
+        else:
+             shell('rm {}/install.out'.format(loc)) 
+             
     return rtxt+'done!'    
     
 
@@ -932,7 +993,13 @@ def avail_pkg(id):
     else:
         pkg_info[id][2] = str(err)+FORM[1]+' errors'+FEND+')'
 
-
+#Prüft ob ein Pfad existiert 
+def check_path(pth):
+    eval_path=shell('find '+pth)
+    if len(pth) > 0 and eval_path.find('find:')==-1:       
+        return True
+    else:       
+        return False
         
 """
 Skriptbau-Funktionen
@@ -943,22 +1010,26 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     #Vorschlag: Überarbeitung der Menü-Ausgabe, vll über eine globale String-Variable, das würde simultane Menü und Flag-Nutzung erlauben
     #z.B. global menutxt und in der menu-Fkt das printen immer über diese globale Variable
     #Falls das überhaupt nötig ist...
-    menutxt, tag = '', tag_id_switcher(bench_id)
+    menutxt, tag = '', tag_id_switcher(bench_id)    
     pth = get_cfg_path(tag)
-      
+    
+    """ 
+    >>>>>    ÜBERHOLT (läd nur noch nötige profile) <<<<
+    >>>>>    ACHTUNG! MENÜ EVTL: ANPASSEN!   <<<<<<<<<<
     #Aufarbeitung des Argumentstrings
     if farg == 'all':
         names = get_cfg_names(pth, tag)
     else:
         names = farg_to_list(farg, tag)
-    
+    """
     #Die Liste der Namen der verfügbaren Profile
-    avail_names = get_cfg_names(pth, tag)
+    #avail_names = get_cfg_names(pth, tag)
     #Die Liste der Namen der nicht verfügbaren Profile
-    unavail_names = []
+    #unavail_names = []
     
     #Die Liste der geladenen Profile aus dem Config-Ordner
-    selected_profiles = cfg_profiles[bench_id].copy()    
+    selected_profiles = cfg_profiles[bench_id].copy()   
+    """
     #Namen von verfügbaren aber nicht ausgewählten Profilnamen
     unselected_names = []
 
@@ -984,7 +1055,8 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
             unavail_names.append(name)
     for profile in selected_profiles:
         menutxt+='Ausgewählt: '+profile[0][0]+'\n'
-       
+    """   
+    
     #Skriptbau, ggf. mit zusätzlichen Argumenten
     if extra_args!='':
         skript=build_batch(selected_profiles, bench_id, extra_args)
@@ -1004,8 +1076,8 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     tstamp = time.strftime("%d-%m-%Y_%H:%M:%S", time.localtime())
     
     #Namen der Auftragsordner
-    run_dir = 'projects/'+tag+'_'+'['+tstamp+']'+'_'+'[run]/'
-    res_dir = 'projects/'+tag+'_'+'['+tstamp+']'+'_'+'[results]/'
+    run_dir='{}/{}_[{}]_[run]/'.format(project_pth,tag,tstamp)
+    res_dir='{}/{}_[{}]_[results]/'.format(project_pth,tag,tstamp)
     
     if os.path.isdir(run_dir[:-1])==False:     
         shell('mkdir -p '+run_dir[:-1])
@@ -1107,7 +1179,7 @@ def build_plot(tstamp, bench,run_dir):
     jobtxt+='#SBATCH --error='+run_dir+bench+'_plot.err\n\n'
     jobtxt+='#SBATCH --output='+run_dir+'plot.out'+'\n'
     jobtxt+='#SBATCH --error='+run_dir+'plot.err'+'\n\n'     
-    jobtxt+= 'python3 plot.py '+tstamp+' '+bench
+    jobtxt+= 'python3 {}/plot.py '.format(loc)+tstamp+' '+bench
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
     if os.path.isdir(run_dir[:-1])==True:
@@ -1153,7 +1225,6 @@ def check_expr_syn(expr):
 
 #Schreibt Script zum installieren der specs 
 #Übergibt alle benötigen Argumente an Install.py
-#TODO dynamischer Pfad
 def install_spec(expr):  
     #Slurmparameter 
     meta=cfg_profiles[0][0][2][0]+'#'+cfg_profiles[0][0][2][1]+'#'+cfg_profiles[0][0][2][2]+'#'+cfg_profiles[0][0][2][3]+'#'+spack_xpth[:-9]   
@@ -1165,35 +1236,34 @@ def install_spec(expr):
    
     #Erstellt Batchscript zum Starten der Installation
     if (os.path.isfile('start_install.sh'))==False: 
-            shell('touch start_install.sh')
-            shell('chmod +x start_install.sh')
-            file_w('start_install.sh','','a')
+            shell('touch {}/start_install.sh'.format(loc))
+            shell('chmod +x {}/start_install.sh'.format(loc))
+            file_w('{}/start_install.sh'.format(loc),'','a')
     else:
         #Clear install.sh
-        shell('echo a > start_install.sh')   
+        shell('echo a > {}/start_install.sh'.format(loc))   
     
     #Slurmparameter für die Installation
     slurm='#!/bin/bash\n' \
     +'#SBATCH --nodes=1\n' \
     +'#SBATCH --partition='+cfg_profiles[0][0][2][0]+'\n' \
-    +'#SBATCH --output=install.sh\n\n' \
     +'source {}/share/spack/setup-env.sh\n\n'.format(spack_xpth[:-9])+'\n' \
-    +'python3 install.py '+meta+' '+expr_[:len(expr_)-1]   
+    +'python3 {}/install.py {} {}'.format(loc,meta,expr_[:len(expr_)-1])   
     
-    file_w('start_install.sh',slurm,0)
-    shell('chmod +x start_install.sh')
-    shell('sbatch start_install.sh')
-    shell('rm start_install.sh')
+    file_w('{}/start_install.sh'.format(loc),slurm,0)
+    shell('chmod +x {}/start_install.sh'.format(loc))
+    shell('sbatch {}/start_install.sh'.format(loc))
+    shell('rm {}/start_install.sh'.format(loc))
     
     #Wartet bis install.sh erstellt und befüllt wurde
-    while exists('install.sh')==False or os.stat('install.sh').st_size==0: 
+    while exists('{}/install.sh'.format(loc))==False or os.stat('{}/install.sh'.format(loc)).st_size==0: 
         time.sleep(5)
         timer+=1
         if timer > 120:
             print('timeout error')
             return error_log('Installationsfehler!')
-    shell('chmod +x install.sh')
-    print(shell('sbatch install.sh'))
+    shell('chmod +x {}/install.sh'.format(loc))
+    print(shell('sbatch {}/install.sh'.format(loc)))
     
     
     
@@ -1325,7 +1395,7 @@ def options_menu():
         elif opt == '1' or opt == 'form-factor':
             print_options_menu('...current form-factor: {}\n...please insert the new value'.format(form_factor_menu))
             form_factor_menu = int(input_format())
-            file_w('mem.txt','form_factor_menu\t\t\t[{}]'.format(str(form_factor_menu)),1)
+            file_w('{}/mem.txt'.format(loc),'form_factor_menu\t\t\t[{}]'.format(str(form_factor_menu)),1)
             calc_terminal_size()
             refresh_format_params()
             print_options_menu('done!')
@@ -1335,17 +1405,17 @@ def options_menu():
             else:
                 print_options_menu('...refresh-intervall is 0: information about package availability won\'t be evaluated!\n...please insert the new value')
             refresh_intervall = int(input_format())
-            file_w('mem.txt','refresh_intervall\t\t\t[{}]'.format(str(refresh_intervall)),2)
+            file_w('{}/mem.txt'.format(loc),'refresh_intervall\t\t\t[{}]'.format(str(refresh_intervall)),2)
             print_options_menu('done!')
         elif opt == '3' or opt == 'colour':
             if colour_support==1:
                 colour_support = 0
-                file_w('mem.txt','colour_support\t\t\t[{}]'.format(str(colour_support)),3)
+                file_w('{}/mem.txt'.format(loc),'colour_support\t\t\t[{}]'.format(str(colour_support)),3)
                 color_check()
                 print_options_menu('done!'+FORM[1]+' ...colour & format off'+FEND)
             elif colour_support==0:
                 colour_support = 1
-                file_w('mem.txt','colour_support\t\t\t[{}]'.format(str(colour_support)),3)
+                file_w('{}/mem.txt'.format(loc),'colour_support\t\t\t[{}]'.format(str(colour_support)),3)
                 color_check()
                 print_options_menu('done!'+FORM[1]+' ...colour & format on'+FEND)
             else:
@@ -1353,11 +1423,11 @@ def options_menu():
         elif opt == '4' or opt == 'debug':
             if dbg==True:
                 debug_mode_switch(0)
-                file_w('mem.txt','debug_mode\t\t\t[0]',4)
+                file_w('{}/mem.txt'.format(loc),'debug_mode\t\t\t[0]',4)
                 print_options_menu('done!'+FORM[1]+' ...debug mode off'+FEND)
             else:
                 debug_mode_switch(1)
-                file_w('mem.txt','debug_mode\t\t\t[1]',4)
+                file_w('{}/mem.txt'.format(loc),'debug_mode\t\t\t[1]',4)
                 print_options_menu('done!'+FORM[1]+' ...debug mode on'+FEND)
         elif opt == '5' or opt == 'show':
             i = 0
@@ -1506,7 +1576,7 @@ def file_w(name, txt, pos):
         error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_w wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))
 
 def get_mem_digit(pos):
-    r = str(file_r('mem.txt', pos))
+    r = str(file_r('{}/mem.txt'.format(loc), pos))
     r = r[r.find('[')+1:r.find(']')]
     if len(r)>0:
         return int(r)
