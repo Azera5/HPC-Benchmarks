@@ -167,7 +167,7 @@ def cl_arg():
     'install: remove all install scripts\n'+
     'log: remove log.txt (error-log file)\n' +
     'mem: remove mem.txt (run time variables)\n'+
-    'all: remove projects, install scripts, log.txt and mem.txt\n'+
+    'all: remove projects, install scripts, log.txt, not mem.txt!\n'+
     '     e.g.: -c projects\n'+
     '     e.g.: -c all\n')
     
@@ -201,19 +201,19 @@ def cl_arg():
         
         #Nur bestimmte Benchmarks werden installiert    
         else:            
-            #Nur bestimmte Profile werden installiert
-            if len(args.install)>1 and args.install[1]!= 'all':
-                names=farg_to_list(args.install[1],args.install[0])                
-                get_cfg(args.install[1])
-                
-                for _ in names:
-                    expr=get_all_specs(args.install[0],names)
-            
             #Alle Profile werden installiert
+            if len(args.install)<2 or args.install[1]== 'all':
+                get_cfg(args.install[0])
+                expr=get_all_specs(args.install[0]) 
+            
+            #Nur bestimmte Profile werden installiert
             else:
-                get_cfg(args.install[0],args.install[1])
-                expr=get_all_specs(args.install[0])                
-        install_spec(expr)
+                names=farg_to_list(args.install[1],args.install[0])                
+                get_cfg(args.install[0],args.install[1])               
+                expr=get_all_specs(args.install[0],names)
+            
+        #TODO: Fix print (Ladebalken verschwinden)        
+        print(install_spec(expr))
     
     #Run Benchmarks
     if args.run:        
@@ -677,8 +677,8 @@ def get_spec(cfg_list,bench):
 #Liefert alle Specs einer Config-Liste bzw. eines Benchmarktyps
 #Erhält Benchmarkname und (optional) Liste mit Config-Namen
 def get_all_specs(bench,cfgs='all'):
-    expr=[]
-    for s in cfg_profiles[tag_id_switcher(bench)]:
+    expr=[]  
+    for s in cfg_profiles[tag_id_switcher(bench)]:        
         if cfgs=='all' or s[0][0] in cfgs:
             expr.append(s[0][3])    
     return expr
@@ -846,11 +846,11 @@ def clean(inpt = 'all'):
     if inpt=='log' or inpt=='all':
         if os.path.isfile('{}/log.txt'.format(loc))==False:
             rtxt+=FCOL[6]+'there was no log-file to be found:\na new one was created!\n'+FEND
-            shell('touch log.txt')
+            shell('touch {}/log.txt'.format(loc))
         else:
             shell('rm {}/log.txt'.format(loc))
             shell('touch {}/log.txt'.format(loc))
-    if inpt=='mem' or inpt=='all':
+    if inpt=='mem':
         if os.path.isfile('{}/mem.txt'.format(loc))==False:
             rtxt+=FCOL[6]+'there was no log-file to be found:\na new one was created!\n'+FEND
         else:
@@ -1283,39 +1283,9 @@ def install_spec(expr):
     #String aller Specs
     for e in expr:
         expr_+=e+'#'            
-   
-    #Erstellt Batchscript zum Starten der Installation
-    if (os.path.isfile('start_install.sh'))==False: 
-            shell('touch {}/start_install.sh'.format(loc))
-            shell('chmod +x {}/start_install.sh'.format(loc))
-            file_w('{}/start_install.sh'.format(loc),'','a')
-    else:
-        #Clear install.sh
-        shell('echo a > {}/start_install.sh'.format(loc))   
     
-    #Slurmparameter für die Installation
-    slurm='#!/bin/bash\n' \
-    +'#SBATCH --nodes=1\n' \
-    +'#SBATCH --partition='+cfg_profiles[0][0][2][0]+'\n' \
-    +'source {}/share/spack/setup-env.sh\n\n'.format(spack_xpth[:-9])+'\n' \
-    +'python3 {}/install.py {} {}'.format(loc,meta,expr_[:len(expr_)-1])   
-    
-    file_w('{}/start_install.sh'.format(loc),slurm,0)
-    shell('chmod +x {}/start_install.sh'.format(loc))
-    shell('sbatch {}/start_install.sh'.format(loc))
-    shell('rm {}/start_install.sh'.format(loc))
-    
-    #Wartet bis install.sh erstellt und befüllt wurde
-    while exists('{}/install.sh'.format(loc))==False or os.stat('{}/install.sh'.format(loc)).st_size==0: 
-        time.sleep(5)
-        timer+=1
-        if timer > 120:
-            menutxt+='installation timeout error!'
-            return error_log('\ninstallation failed via timeout!', locals())
-    shell('chmod +x {}/install.sh'.format(loc))
-    print(shell('sbatch {}/install.sh'.format(loc)))
-    
-    
+    #Printen der Job ID klappt noch nicht
+    return shell('source {}/share/spack/setup-env.sh ; python3 {}/install.py {} {} ; chmod +x {}/install.sh ; sbatch {}/install.sh'.format(spack_xpth[:-9], loc,meta,expr_[:len(expr_)-1],loc,loc))
     
 
 """
@@ -1583,8 +1553,28 @@ def hpl_menu():
             print_hpl_menu(bench_run(hpl_id, input_format().replace(' ','')))                         
         elif opt == '2' or opt == 'view':
             print_hpl_menu(view_installed_specs(tag_id_switcher(hpl_id)))
-        elif opt == '3'or opt == 'install':
-            print_hpl_menu('Welche specs sollen installiert werden?\n'+install_spec(str(input_format())))
+        elif opt == '3'or opt == 'install':           
+            txt=ml+FCOL[13]+'which profiles do you wish to install?'+FEND
+            txt+=ml+FCOL[0]+'\n'+'how to reference profiles: '+ml+'\ne.g. hpl_cfg_test.txt => test \n'+ml+'e.g. hpl_cfg_1.txt,hpl_cfg_2.txt,...,hpl_cfg_5.txt => 1-5 \n'+ml+'e.g. valid input: 1-3,test,9\n'+FEND
+            txt+='\n\n'+ml+FBGR[0]+'found profiles:'+FEND+'\n'+ml
+            left_size=t_width-len(ml)
+            for name in get_cfg_names(bench_pths[hpl_id],tag_id_switcher(hpl_id)):
+                if left_size<len(name+mr):
+                    left_size-=len(ml)
+                    txt+='\n'+ml
+                txt+=FORM[0]+name+FEND+mr
+                left_size-=len(name+mr)
+            print_hpl_menu(txt)
+            
+            #preparation for install_spec
+            expr=input_format()
+            if expr=='' or expr =='all':
+                expr=get_all_specs('hpl')
+            else:
+                names=farg_to_list(expr,'hpl')
+                expr=get_all_specs('hpl',names)
+            print_hpl_menu(install_spec(expr))
+            
         else:
             print_hpl_menu(FORM[1]+'Eingabe ungültig: Bitte eine Ganzzahl zw. 0-3, z.B. 1'+FEND)
 
