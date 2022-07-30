@@ -177,9 +177,10 @@ def cl_arg():
     if args.clean:       
         return  print(clean(args.clean[0]))
     
+    calc_terminal_size()
     prepare_array()
     check_data()
-    check_dirs()   
+    check_dirs()
     
     get_cfg(tag_id_switcher(misc_id))
    
@@ -447,7 +448,9 @@ def find_matplot_python_hash():
     pth=pth[pth.find('python'):].replace('-','',1)
     pth=pth[pth.find('-')+1:pth.find('/')]
     return '/'+pth
-   
+  
+
+  
 """
 Debug- & Hilfs-Funktionen
 """
@@ -487,12 +490,47 @@ def loadprogress(txt = ''):
 loadprogress.c=0
 
 #In welcher Funktion ist wann, welche Exception o.a. Unregelmäßigkeit aufgetreten?
-def error_log(txt):
+def error_log(txt, exc_name='', exc_line='', local_table={}):
     global errorstack
     t = time.localtime()
-    txt = str(inspect.stack()[1][3])+' [Funktion] '+time.strftime("%d-%m-%Y---%H:%M:%S", t)+' [Zeitpunkt] '+txt+'\n'
-    file_w('{}/log.txt'.format(loc), txt, 'a')
-    errorstack.append(FCOL[15]+str(inspect.stack()[1][3])+FEND+' [Funktion] '+time.strftime("%d-%m-%Y---%H:%M:%S", t)+' [Zeitpunkt] '+txt+'\n')
+    info_l = ''
+    info_s = ''
+
+    if exc_name!='':
+        errcol = 8
+        descr_l = ': '+exc_name+' in line '+str(exc_line)
+        descr_s = ': '+FCOL[errcol]+exc_name+FEND+' in line '+FCOL[errcol]+str(exc_line)+FEND
+    else:
+        errcol = 6
+        descr_l = ''
+        descr_s = ''
+    call_hierarchy_errlog = ''
+    call_hierarchy_errstk = ''
+    call_hierarchy = []
+    
+    
+    if txt!='':
+        txt = 'further information: '+txt
+    if dbg==True:
+        if len(local_table)>0:
+            local_vars = []
+            for tuple in local_table.items():
+                local_vars.append(str(tuple))
+         
+            info_s =FCOL[errcol]+'\n {} \n'.format(' - '*(int(t_width*0.15)))+'{}locals\n'.format('   '*(int(t_width*0.075)))+FEND+'\n'.join(local_vars)+FCOL[errcol]+'\n {} \n'.format(' - '*(int(t_width*0.2)))+FEND
+            info_l ='\n {} \n'.format(' - '*(int(t_width*0.15)))+'{}locals\n'.format('   '*(int(t_width*0.075)))+'\n'.join(local_vars)+'\n {} \n'.format(' - '*(int(t_width*0.2)))
+    
+    #we handle the two inner- (<=> error log at i=0 and the problem-function at i=1) & outermost frames (<=> root) as special cases 
+    i=len(inspect.stack())-2
+    while (i>2):
+        i-=1
+        call_hierarchy.append(inspect.stack()[i][3])
+    call_hierarchy_errlog = 'call hierarchy: '+inspect.stack()[len(inspect.stack())-1][3]+'-->'+'-->'.join(call_hierarchy)+'-->'+'***'+inspect.stack()[1][3]+'***'+'-->'+inspect.stack()[0][3]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+' [***problem occurance{}***] '.format(descr_l)+'\n'
+    call_hierarchy_errstk = FBGR[0]+'call hierarchy'+FEND+' '+FCOL[15]+inspect.stack()[len(inspect.stack())-1][3]+FEND+'-->'+'-->'.join(call_hierarchy)+'-->'+FCOL[errcol]+inspect.stack()[1][3]+FEND+'-->'+FCOL[0]+inspect.stack()[0][3]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+FEND+' ['+FCOL[15]+' root'+FCOL[errcol]+' problem occurance{} '.format(descr_s)+FEND+']'+'\n'
+        
+    
+    file_w('{}/log.txt'.format(loc), call_hierarchy_errlog+txt+info_l+'\n', 'a')
+    errorstack.append(call_hierarchy_errstk+txt+info_s+'\n')
 
 #Prüft ob der Fehlerstack leer ist
 def check_err_stack():
@@ -531,13 +569,14 @@ def shell(cmd):
     try:
         #Ausgabe soll nicht direkt auf's Terminal
         p = subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
-        if(p.returncode==0 and dbg==True):
-            error_log('{} used the subshell for >>'.format(str(inspect.stack()[1][3]))+cmd+'<< with a non zero return')
+        if(p.returncode!=0 and dbg==True):
+            error_log('{} used the subshell for >>'.format(str(inspect.stack()[1][3]))+cmd+'<< with a non zero return', '', '', locals())
             #menutxt=ml+FCOL[15]+'{} used the subshell for >>'.format(str(inspect.stack()[1][3]))+cmd+'<< with a non zero return'+FEND
         #.stdout liefert einen Binärstring desw. die Dekodierung
         return p.stdout.decode('UTF-8')
     except Exception as exc:
-        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nshell wurde aufgerufen aus: '+str(inspect.stack()[1][3]))
+        error_log('\nsubshell was used by '+str(inspect.stack()[1][3])+'\ncommand: >>'+cmd+'<< ', format(type(exc).__name__), inspect.stack()[0][2], locals())
+    
 
 #Wertet einen Python-Ausdruck aus
 def code_eval(expr):   
@@ -561,12 +600,12 @@ def code_eval(expr):
     try:
         headtxt=FORM[0]+str(type(r))+' [type]'+FEND
         return inftxt+'{}'.format(FBGR[14]+headtxt+' '*(int(t_width*0.5)-len(headtxt))+'\n'+FCOL[15]+FORM[0]+str(r)+FEND+'\n'+FCOL[3]+FORM[0]+aux_stdout.getvalue()+FEND)+'\n'
-        
+
     except Exception as exc:
-        error_log(' {} [Exception]'.format(type(exc).__name__))
+        error_log('\neval was used by '+str(inspect.stack()[1][3])+'\ncommand: >>'+cmd+'<< ', format(type(exc).__name__), inspect.stack()[0][2], locals())
         headtxt=FORM[0]+str(type(r))+' [type] --- '+' {} [Exception]'.format(type(exc).__name__)+FEND
         return inftxt+'{}'.format(FBGR[14]+headtxt+' '*(int(t_width*0.5)-len(headtxt))+'\n'+FCOL[15]+FORM[0]+str(r)+FEND+'\n'+FCOL[3]+FORM[0]+aux_stdout.getvalue()+FEND)+'\n'
-    
+
 #Liefert für eine Configzeile "123.4.5   [Parameter x]" nur die Zahl
 def config_cut(line):
     c = line.find("[")
@@ -693,7 +732,7 @@ def get_target_path(spec):
     if r!='':
         return r+'/bin'
     else:
-        error_log('Ein Pfad für '+spec[:spec.find('^')]+' konnte nicht gefunden werden!')
+        error_log('Ein Pfad für '+spec[:spec.find('^')]+' konnte nicht gefunden werden!', '', '', locals())
         return 'Kein Pfad gefunden!'
 
 #Überschreibt die Zeilen von s_line (int) bis inkl. e_line (int) von file1 nach (ggf. mit Offset) file2
@@ -723,7 +762,7 @@ def farg_to_list(farg, bench):
 
 #Eine Partition muss angegeben werden, sonst wird der User aufgefordert zu ergänzen
 def eval_partition(profile, name): 
-    error_log('Für '+name+' wurde keine Partition angegeben!')
+    error_log('Für '+name+' wurde keine Partition angegeben!', '', '', locals())
     while True:
         #clear()
         print('Für '+name+' wurde keine Partition angegeben!')
@@ -782,12 +821,12 @@ def find_binary(profile, bench_id):
         #Die Benchmarks sollten vom home-Verzeichnis aus erreichbar sein... <-- TODO: klären ob das den Anforderungen entspricht
         _ = bin_path.find('/home')
         if _ == -1:
-            error_log('Das package {} scheint nicht verfügbar zu sein! Profil: '.format(profile[0][3])+profile[0][0])+'\n'
+            error_log('package {} seems to be unavailable! profile: '.format(profile[0][3])+profile[0][0], '', '', locals())
         else:
             bin_path = ((bin_path[_:]).strip()+'/bin/')
         return bin_path
     else:
-        error_log('Aus dem Profil '+profile[0][0]+'wird ein syntaktisch falsches spec extrahiert'+': {} '.format(profile[0][3]))
+        error_log('Aus dem Profil '+profile[0][0]+'wird ein syntaktisch falsches spec extrahiert'+': {} '.format(profile[0][3]), '', '', locals())
         return bin_path
 
 def delete_dir(pth):
@@ -970,7 +1009,7 @@ def avail_pkg(id):
             pkg_info[id][0] = FCOL[9]+'?/? (command not available!)'+FEND
             pkg_info[id][1] = FCOL[9]+'?'+FEND
             pkg_info[id][2] = FCOL[9]+'?'+FEND
-            error_log('Informationen zum Verfügbarkeitsgrad der packages konnten nicht geholt werden, ggf. ist der Pfad zu spack falsch!\n{}'.format(spack_xpth))
+            error_log('Informationen zum Verfügbarkeitsgrad der packages konnten nicht geholt werden, ggf. ist der Pfad zu spack falsch!\n{}'.format(spack_xpth), '', '', locals())
         else:
             if str(res[0:14])=='==> No package':
                 avl-=1
@@ -1000,6 +1039,8 @@ def check_path(pth):
         return True
     else:       
         return False
+
+
         
 """
 Skriptbau-Funktionen
@@ -1050,7 +1091,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     
     for name in names:
         if name not in avail_names:
-            error_log('Profil: '+name+' war nicht verfügbar!')
+            error_log('Profil: '+name+' war nicht verfügbar!', '', '', locals())
             menutxt+='Profil: '+name+' war nicht verfügbar!'+'\n'
             unavail_names.append(name)
     for profile in selected_profiles:
@@ -1187,10 +1228,12 @@ def build_plot(tstamp, bench,run_dir):
         shell('chmod +x '+run_dir+bench+'{}.sh'.format('_plotskript'))
     return run_dir+bench+'{}.sh'.format('_plotskript')
 
+
+
 """
 Installation
 """
-""
+
 def view_installed_specs(name=0):
     try:
         if name==0:
@@ -1200,7 +1243,7 @@ def view_installed_specs(name=0):
             return shell('{} find --show-full-compiler '.format(spack_xpth)+name)  
     
     except Exception as exc:
-        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nspec:'+str(name))
+        error_log('\nspec:'+str(name), format(type(exc).__name__), inspect.stack()[0][2], locals())
 
 #Prüft Specausdruck auf grobe Syntaxfehler
 def check_expr_syn(expr):
@@ -1221,7 +1264,6 @@ def check_expr_syn(expr):
             print('Syntaxfehler an Position: '+str(r))
             return False
     return True
-
 
 #Schreibt Script zum installieren der specs 
 #Übergibt alle benötigen Argumente an Install.py
@@ -1261,7 +1303,7 @@ def install_spec(expr):
         timer+=1
         if timer > 120:
             print('timeout error')
-            return error_log('Installationsfehler!')
+            return error_log('Installationsfehler!', '', '', locals())
     shell('chmod +x {}/install.sh'.format(loc))
     print(shell('sbatch {}/install.sh'.format(loc)))
     
@@ -1293,8 +1335,8 @@ def print_menu(txt = ''):
                 get_info = False
                 opt_lines+=ml+'({})'.format(id+2)+mr+' {} ... '.format(tag_id_switcher(id)).upper()+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+'\n'
             print(opt_lines[:-1])
-        except Exception as exc:     
-            error_log(' {} [Exception]'.format(type(exc).__name__))
+        except Exception as exc:
+            error_log('', format(type(exc).__name__), inspect.stack()[0][2], locals())
             for id in range(len(bench_id_list)):
                 if id==misc_id:
                     continue
@@ -1304,7 +1346,11 @@ def print_menu(txt = ''):
             if id==misc_id:
                 continue
             if pkg_info[id][0]!='empty':
-                print(ml+'({})'.format(id+2)+mr+' {} ... '.format(tag_id_switcher(id)).upper()+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+' {}s ago'.format(int(time.time()-print_menu.updatetime)))
+                if (inspect.isfunction(str(tag_id_switcher(id)+'_menu')) and inspect.isfunction('print_'+str(tag_id_switcher(id)+'_menu')))!=True:
+                    implementation_status = FCOL[15]+' --- no menu implementation ---'+FEND
+                else:
+                    implementation_status = ''
+                print(ml+'({})'.format(id+2)+mr+' {} ... '.format(tag_id_switcher(id)).upper()+implementation_status+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+' {}s ago'.format(int(time.time()-print_menu.updatetime)))
             else:
                 print(ml+'({})'.format(id+2)+mr+' {} '.format(tag_id_switcher(id)).upper())           
     print(ml+'({})'.format(len(bench_id_list)+2)+mr+' Fehleranzeige '+check_err_stack())
@@ -1545,8 +1591,8 @@ def file_r(name, pos):
         with open(name, 'r') as f:      
             stringlist = f.readlines()
             return stringlist[int(pos)]
-    except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_r wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))        
+    except Exception as exc:
+        error_log('\nfile_r was called by '+str(inspect.stack()[1][3])+'\ntarget file: '+name+'\nline: '+str(pos), format(type(exc).__name__), inspect.stack()[0][2], locals())        
 
 def count_line(name):
      with open (name, 'r') as f:
@@ -1572,8 +1618,8 @@ def file_w(name, txt, pos):
         else:
             with open(name, "a") as f:     
                 f.write(txt+'\n')
-    except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__)+'\nfile_w wurde aufgerufen aus: '+str(inspect.stack()[1][3])+'\nZieldatei: '+name+'\nPosition: '+str(pos))
+    except Exception as exc:
+        error_log('\nfile_w was used by '+str(inspect.stack()[1][3])+'\ntarget file: '+name+'\nline: '+str(pos)+'\ntext: '+str(txt), format(type(exc).__name__), inspect.stack()[0][2], locals())
 
 def get_mem_digit(pos):
     r = str(file_r('{}/mem.txt'.format(loc), pos))
@@ -1588,7 +1634,7 @@ def get_mem_digit(pos):
     try:     
         
     except Exception as exc:     
-        error_log(' {} [Exception]'.format(type(exc).__name__)) 
+        error_log('') 
 """
 
 #Startpunkt
