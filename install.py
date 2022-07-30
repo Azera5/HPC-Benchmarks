@@ -5,6 +5,7 @@ import re
 
 meta=sys.argv[1].split('#')
 expr=sys.argv[2].split('#')
+err=''
 
 #plot.py Path
 loc=str(os.path.dirname(os.path.abspath(__file__)))
@@ -32,7 +33,7 @@ def check_expr_syn(expr):
     for _ in expr_list:
         r=expr.find(_)        
         if r != -1:
-            os.system('echo Syntaxfehler an Position: {} >> install.err'.format(str(r)))
+            os.system('echo Syntaxfehler an Position: {} >> {}/install.err'.format(str(r),loc))
             return False
     return True
 
@@ -87,7 +88,7 @@ def install_spec(expr):
     cpus=meta[3]
     #Check ob angegebene Partition existiert
     if shell('sinfo -h -p '+partition).find(partition)==-1:
-        return os.system('echo Partition: {} existiert nicht >> install.err'.format(str(partition)))         
+        return os.system('echo Partition: {} existiert nicht >> {}/install.err'.format(str(partition),loc))         
         
     slurm=''
     specs=''  
@@ -111,11 +112,11 @@ def install_spec(expr):
         
         #Dokumentieren des Fehlers
         else:
-            os.system('echo {} existiert nicht >> install.err'.format(str(e)))
+            os.system('echo {} existiert nicht >> {}/install.err'.format(str(e),loc))
             
     
     if len(specs)==0:
-        return os.system('echo bereits alles installiert >> install.err'.format(str(e)))                
+        return os.system('echo bereits alles installiert >> {}/install.err'.format(str(e),loc))                
     else:        
         return str(slurm+specs)
 
