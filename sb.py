@@ -149,11 +149,19 @@ def cl_arg():
     
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument('-i','--install',nargs='+',type=str,help=''+
+    FCOL[15]+
     '<Benchmark> <cfg>,<cfg>,...,<cfg>\n'+
+    FEND+
+    FCOL[13]+
     '     e.g.: -i hpl 1,3-4,example\n\n'+
+    FEND+
+    FCOL[15]+
     'all: Install all benchmarks/cfg\n'+
+    FEND+
+    FCOL[13]+
     '     e.g.: -i all\n'+
-    '           -i osu all\n\n')
+    '           -i osu all\n\n'+
+    FEND)
     
     parser.add_argument('-r','--run',nargs='+',type=str,help=''+   
     'hpl <cfg>,<cfg>,...,<cfg>\n'+     
@@ -225,11 +233,11 @@ def cl_arg():
         if args.run[0]=='hpl':            
             if args_len < 2 or args.run[1]=='all':
                 get_cfg(args.run[0])
-                pth=bench_run(tag_id_switcher(args.run[0]),'all')            
+                pth=bench_run(tag_id_switcher(args.run[0]),'all') 
                 print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
             else:
                 get_cfg(args.run[0],args.run[1])               
-                pth=bench_run(tag_id_switcher(args.run[0]),args.run[1])            
+                pth=bench_run(tag_id_switcher(args.run[0]),args.run[1])
                 print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
        
         #run osu
@@ -493,7 +501,8 @@ def loadprogress(txt = ''):
     print(txt+'.'*loadprogress.c, end='\r')
 loadprogress.c=0
 
-#In welcher Funktion ist wann, welche Exception o.a. Unregelmäßigkeit aufgetreten?
+#logs a hierarchy of function calls, the locals corresponding to the crashing function and traceback-information in case of exceptions
+#the same information is aggregated into two distinct strings: info_l (--> log.txt <=> colorless & persistent) and info_s (--> errorstack <=> volatile), the latter can have color support and the first one guarantees that there's always a variant without any color constants because of possible support issues  
 def error_log(txt, local_table={}, exc_info=''):
     global errorstack
     t = time.localtime()
@@ -539,14 +548,8 @@ def error_log(txt, local_table={}, exc_info=''):
     call_hierarchy_errlog = inspect.stack()[len(inspect.stack())-1][1]+': '+inspect.stack()[len(inspect.stack())-1][3]+'-->'+'-->'.join(list_econcat(call_hierarchy,line_hierarchy,'','#'))+'-->'+'***'+inspect.stack()[1][3]+'***'+'#'+str(inspect.stack()[2][2])+'-->'+inspect.stack()[0][3]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+' [***problem occurance***] '+'\n'
     call_hierarchy_errstk = inspect.stack()[len(inspect.stack())-1][1]+': '+FCOL[13]+inspect.stack()[len(inspect.stack())-1][3]+FEND+'-->'+'-->'.join(list_econcat(call_hierarchy,line_hierarchy,FEND,FCOL[0]+'#',FEND))+'-->'+FCOL[errcol]+inspect.stack()[1][3]+FCOL[0]+'#'+str(inspect.stack()[2][2])+FEND+'-->'+inspect.stack()[0][3]+FCOL[0]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+FEND+' ['+FCOL[13]+'root'+FCOL[errcol]+' problem occurance'+FEND+']'+'\n'
     
-    #+FCOL[0]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+FEND
-    #list_econcat(call_hierarchy,line_hierarchy,'','#')
-    #list_econcat(call_hierarchy,line_hierarchy,FEND,FCOL[0]+'#',FEND)
-    
     localslist_color = list_econcat(local_varnumber, list_econcat(local_varname, local_varvalue, FCOL[errcol], FEND+FCOL[15]+'\t<==>\t'+FEND+FCOL[errcol], FEND), FCOL[15], FEND)
     localslist = list_econcat(local_varnumber, list_econcat(local_varname, local_varvalue, '', '<==>\t'))
-    
-    
     
     #call hierarchy
     info_s=FCOL[15]+'{}\n'.format('---'*(int(t_width*0.2)))+FORM[0]+'{} - call hierarchy - \n'.format('   '*(int(t_width*0.09)))+FEND+call_hierarchy_errstk+txt+'\n'
@@ -566,7 +569,7 @@ def error_log(txt, local_table={}, exc_info=''):
     file_w('{}/log.txt'.format(loc), info_l+'\n', 'a')
     errorstack.append(info_s+'\n')
 
-#Prüft ob der Fehlerstack leer ist
+#checks whether the errorstack is empty
 def check_err_stack():
     if len(errorstack)!=0:
         return '...entries available'
@@ -1120,85 +1123,87 @@ Skriptbau-Funktionen
 """
 
 #Default Argument <=> wir wollen alle Profile laufen lassen
-def bench_run(bench_id, farg = 'all', extra_args = ''):
+def bench_run(bench_id, farg = 'all', extra_args = ''):   
+
+    """ 
+    >>>>>   script building pipeline (1/5)           <<<<
+    >>>>>   1.1 relevancy check (only menu-based)    <<<<
+    >>>>>   1.2 availability check                   <<<<
+    """
+
     global menutxt
     tag = tag_id_switcher(bench_id)    
     pth = get_cfg_path(tag)
     
-    """ 
-    >>>>>    ÜBERHOLT (läd nur noch nötige profile) <<<<
-    >>>>>    ACHTUNG! MENÜ EVTL: ANPASSEN!   <<<<<<<<<<
-    """
-    
     selected_profiles = cfg_profiles[bench_id].copy()
     
-    #flag-based only loads relevant profiles
+    #Die Liste der Namen der verfügbaren Profile
+    avail_names = get_cfg_names(pth, tag)
+    #Die Liste der Namen der nicht verfügbaren Profile
+    unavail_names = []
+    
+    #execution via flag in priciple uses only relevant profiles => first check is only relevant for menu-based control
     if menu_ctrl==True:
         #Namen von verfügbaren aber nicht ausgewählten Profilnamen
         unselected_names = []
-
-        #Die Liste der Namen der verfügbaren Profile
-        avail_names = get_cfg_names(pth, tag)
-        #Die Liste der Namen der nicht verfügbaren Profile
-        unavail_names = []
         
-        #Aufarbeitung des Argumentstrings
+        #argument interpretation
         if farg == 'all':
             names = get_cfg_names(pth, tag)
         else:
             names = farg_to_list(farg, tag)
 
-        #Indizes der zu entfernenden Profile (nicht selektiert)
+        #indices list for profiles not corresponding to our current run
         dlist=[]
         
         for i in range(len(selected_profiles)):
-            #Der Profilname ist nicht in der Liste der zu nutzenden Profile dabei...
             if selected_profiles[i][0][0] not in names:
-                #...also vormerken zum Entfernen
                 dlist.append(i)
+                #these are the profiles we shall ignore
                 unselected_names.append(selected_profiles[i][0][0])
         dlist.reverse()
         
-        #Entfernung der unerwünschten Profile
+        #now only relevant profiles remain --> but are they available?
         for i in dlist:
             del selected_profiles[i]
             
         if len(selected_profiles)==0:
             menutxt+='no known profiles were selected!'+'\n'
-            return FCOL[9]+'--- script building was canceled ---'+FEND
+            menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND
+            return '-1'
         
-        #Indizes der zu entfernenden Profile
-        dlist=[]
-        
-        for i in range(len(selected_profiles)):
-            if selected_profiles[i][0][2]=='no path found!':
-                problem = ''
-                if dbg==True:
-                    problem = shell('{} find '.format(spack_xpth)+selected_profiles[i][0][3])
-                    if problem.find('Kommando nicht gefunden')>-1 or problem.find('command not found')>-1:
-                        error_log('no valid path to spack binary available!', locals())
-                        menutxt+=FCOL[9]+FORM[0]+'no valid path to spack binary available!'+FEND+'\n'
-                        return FCOL[9]+'--- script building was canceled ---'+FEND
-                    
-                error_log('profile: '+selected_profiles[i][0][0]+' was deselected! (no path known)'+'\n'+problem, locals())
-                menutxt+='profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
-                dlist.append(i)
-                unavail_names.append(selected_profiles[i][0][0])
-        dlist.reverse()
-        
-        for i in dlist:
-            del selected_profiles[i]
+    #indices list for profiles not available for our current run
+    #this second check is relevant for flag-based execution too
+    dlist=[]
+    
+    for i in range(len(selected_profiles)):
+        if selected_profiles[i][0][2]=='no path found!':            
+            problem = shell('{} find '.format(spack_xpth)+selected_profiles[i][0][3])
+            if problem.find('Kommando nicht gefunden')>-1 or problem.find('command not found')>-1:
+                error_log('no valid path to spack binary available!', locals())
+                menutxt+=FCOL[9]+FORM[0]+'no valid path to spack binary available!'+FEND+'\n'
+                menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND
+                return '-1'
+            error_log('profile: '+selected_profiles[i][0][0]+' was deselected! (no path known)'+'\n'+problem, locals())
+            menutxt+='profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
+            dlist.append(i)
+            unavail_names.append(selected_profiles[i][0][0])
+    dlist.reverse()
+    
+    #now only relevant *and* available profiles remain
+    for i in dlist:
+        del selected_profiles[i]
 
-        if len(selected_profiles)==0:
-            return FCOL[9]+'--- script building was canceled ---'+FEND
-        
-        """
-        if dbg==True:
-            for name in unselected_names:
-                menutxt+=FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
-            for name in unselected_names:
-                menutxt+=FCOL[6]+name+ml+'(unavailable)'+FEND+'\n'
-        """    
+    if len(selected_profiles)==0:
+        menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND
+        return '-1'
+    
+    if dbg==True and menu_ctrl==True:
+        menutxt+='--- '+FBGR[0]+FCOL[2]+'Summery'+FEND+' ---'+'\n'
+        for name in unselected_names:
+            menutxt+=FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
+        for name in unselected_names:
+            menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'    
             
     
     #Skriptbau, ggf. mit zusätzlichen Argumenten
@@ -1213,7 +1218,14 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     return FCOL[13]+skript+FEND
 
 #Hiermit soll das Skript gebaut werden 
-def build_batch(selected_profiles, bench_id, extra_args = ''):    
+def build_batch(selected_profiles, bench_id, extra_args = ''):  
+
+    """ 
+    >>>>>   script building pipeline (2/5)           <<<<
+    >>>>>   1.1 directory-managment                  <<<<
+    >>>>>   1.2 batchscript & dependency-handling    <<<<
+    """
+  
     first_job=True
     tag = tag_id_switcher(bench_id)
     
@@ -1270,6 +1282,12 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
 
 def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
 
+    """ 
+    >>>>>   script building pipeline (3/5)           <<<<
+    >>>>>   job-script design according to           <<<<
+    >>>>>   the selected & available profiles        <<<<
+    """
+
     #Manche Dinge werden direkt ermittelt...
     if bench_id != osu_id:
         bin_path = find_binary(profile, bench_id)        
@@ -1309,6 +1327,12 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
 
 def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output):
 
+    """ 
+    >>>>>   script building pipeline (4/5)           <<<<
+    >>>>>   final design of the execution line       <<<<
+    >>>>>   individual handling per benchmark        <<<<
+    """
+
     txt = ''    
     if bench_id==hpl_id:
         txt+='cd {}'.format(bin_path)+'\n' #<--- TODO: schöner lösen?
@@ -1318,6 +1342,13 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output)
     return txt
 
 def build_plot(tstamp, bench,run_dir):
+
+    """ 
+    >>>>>   script building pipeline (5/5)           <<<<
+    >>>>>   graph drawing via plot.py                <<<<
+    >>>>>   individual handling per benchmark        <<<<
+    """
+
     jobtxt=write_slurm_params(cfg_profiles[0][0], 'plotskript')
     jobtxt+='#SBATCH --job-name='+bench+'_plot\n' 
     jobtxt+='#SBATCH --error='+run_dir+bench+'_plot.err\n\n'
