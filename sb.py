@@ -72,6 +72,8 @@ colour_support = 0
 menutxt=''
 #Debug-Informationen anzeigen
 dbg=True
+#Steuern wir über Menü oder Flags?
+menu_ctrl=False
 
 #Schriftfarb-Konstanten
 """
@@ -143,7 +145,7 @@ test_list2 = [['aaaaaa'],['bbbbbb'],['ccccccc'],['dddddddd']]
 Command-Line-Parameter
 """
 def cl_arg():
-    global cfg_profiles
+    global cfg_profiles, menu_ctrl
     
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument('-i','--install',nargs='+',type=str,help=''+
@@ -247,6 +249,7 @@ def cl_arg():
             if id==misc_id:
                 continue
             get_cfg(tag_id_switcher(id))
+        menu_ctrl=True
         menu()
 
 
@@ -265,7 +268,7 @@ def evaluate_paths():
     #Vorbereitung der Pfad- & Info-Arrays (letztere nicht hier befüllt)
     for id in bench_id_list:
         bench_pths.append('empty')
-        pkg_info.append(['empty', 'empty', 'empty'])
+        pkg_info.append(['empty', 'empty', 'empty', 'empty'])
     
     #Kalkulation der Pfade: der tag_id_switcher muss die IDs natürlich kennen!
     for id in bench_id_list:
@@ -496,29 +499,54 @@ def error_log(txt, local_table={}, exc_info=''):
     t = time.localtime()
 
     if exc_info!='':
-        errcol = 9
-    else:
         errcol = 6
+    else:
+        errcol = 7
     call_hierarchy = []
+    line_hierarchy = []
        
     if txt!='':
         txt = 'further information: '+txt
     if dbg==True:
         if len(local_table)>0:
-            local_vars = []
+            i = 0
+            maxlength = 0
+            local_varname, local_varvalue, local_varnumber, local_scale = [], [], [], []
             for tuple in local_table.items():
-                local_vars.append(str(tuple))
+                _ = list(tuple)
+                i+=1
+                local_varname.append(str(_[0]))
+                local_varvalue.append(str(_[1]))
+                local_varnumber.append('['+str(i)+'.] ')
+                local_scale.append((len(str(_[0]))+len('['+str(i)+'.] '))//8)
+                
+                if len(str(_[0]))+len('['+str(i)+'.] ')>maxlength:
+                    maxlength = len(str(_[0]))+len('['+str(i)+'.] ')
+            
+            for n in range(len(local_scale)):
+                local_scale[n] = (maxlength//8)-local_scale[n]
+                local_varname[n] = local_varname[n]+'\t'*local_scale[n]
          
-            #info_s =FCOL[errcol]+'\n {} \n'.format(' - '*(int(t_width*0.15)))+'{}locals\n'.format('   '*(int(t_width*0.07)))+'\n'.join(local_vars)+FCOL[errcol]+'\n {} \n'.format(' - '*(int(t_width*0.15)))+FEND
-            #info_l ='\n {} \n'.format(' - '*(int(t_width*0.15)))+'{}locals\n'.format('   '*(int(t_width*0.07)))+'\n'.join(local_vars)+'\n {} \n'.format(' - '*(int(t_width*0.15)))
-    
     #we handle the two inner- (<=> error log at i=0 and the problem-function at i=1) & outermost frames (<=> root) as special cases 
     i=len(inspect.stack())-2
     while (i>2):
         i-=1
+        #how is the function called?
         call_hierarchy.append(inspect.stack()[i][3])
-    call_hierarchy_errlog = 'call hierarchy: '+inspect.stack()[len(inspect.stack())-1][3]+'-->'+'-->'.join(call_hierarchy)+'-->'+'***'+inspect.stack()[1][3]+'***'+'-->'+inspect.stack()[0][3]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+' [***problem occurance***] '+'\n'
-    call_hierarchy_errstk = FCOL[13]+inspect.stack()[len(inspect.stack())-1][3]+FEND+'-->'+'-->'.join(call_hierarchy)+'-->'+FCOL[errcol]+inspect.stack()[1][3]+FEND+'-->'+FCOL[0]+inspect.stack()[0][3]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+FEND+' ['+FCOL[13]+'root'+FCOL[errcol]+' problem occurance'+FEND+']'+'\n'
+        #in which line was it called?
+        line_hierarchy.append(inspect.stack()[i+1][2])
+        
+    call_hierarchy_errlog = inspect.stack()[len(inspect.stack())-1][1]+': '+inspect.stack()[len(inspect.stack())-1][3]+'-->'+'-->'.join(list_econcat(call_hierarchy,line_hierarchy,'','#'))+'-->'+'***'+inspect.stack()[1][3]+'***'+'#'+str(inspect.stack()[2][2])+'-->'+inspect.stack()[0][3]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+' [***problem occurance***] '+'\n'
+    call_hierarchy_errstk = inspect.stack()[len(inspect.stack())-1][1]+': '+FCOL[13]+inspect.stack()[len(inspect.stack())-1][3]+FEND+'-->'+'-->'.join(list_econcat(call_hierarchy,line_hierarchy,FEND,FCOL[0]+'#',FEND))+'-->'+FCOL[errcol]+inspect.stack()[1][3]+FCOL[0]+'#'+str(inspect.stack()[2][2])+FEND+'-->'+inspect.stack()[0][3]+FCOL[0]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+FEND+' ['+FCOL[13]+'root'+FCOL[errcol]+' problem occurance'+FEND+']'+'\n'
+    
+    #+FCOL[0]+'@'+time.strftime("%d-%m-%Y---%H:%M:%S", t)+FEND
+    #list_econcat(call_hierarchy,line_hierarchy,'','#')
+    #list_econcat(call_hierarchy,line_hierarchy,FEND,FCOL[0]+'#',FEND)
+    
+    localslist_color = list_econcat(local_varnumber, list_econcat(local_varname, local_varvalue, FCOL[errcol], FEND+FCOL[15]+'\t<==>\t'+FEND+FCOL[errcol], FEND), FCOL[15], FEND)
+    localslist = list_econcat(local_varnumber, list_econcat(local_varname, local_varvalue, '', '<==>\t'))
+    
+    
     
     #call hierarchy
     info_s=FCOL[15]+'{}\n'.format('---'*(int(t_width*0.2)))+FORM[0]+'{} - call hierarchy - \n'.format('   '*(int(t_width*0.09)))+FEND+call_hierarchy_errstk+txt+'\n'
@@ -529,8 +557,8 @@ def error_log(txt, local_table={}, exc_info=''):
         info_l+='{}\n'.format(' - '*50)+'{}    - exception -   \n'.format('   '*25)+exc_info   
     #locals info
     if len(local_table)>0:    
-        info_s+=FCOL[15]+'{}\n'.format(' - '*(int(t_width*0.2)))+FORM[0]+'{}     - locals -     \n'.format('   '*(int(t_width*0.09)))+FEND+FCOL[errcol]+'\n'.join(local_vars)+FEND+'\n'
-        info_l+='{}\n'.format(' - '*50)+'{}     - locals -     \n'.format('   '*25)+'\n'.join(local_vars)+'\n'
+        info_s+=FCOL[15]+'{}\n'.format(' - '*(int(t_width*0.2)))+FORM[0]+'{}     - locals -     \n'.format('   '*(int(t_width*0.09)))+FEND+FCOL[errcol]+'\n'.join(localslist_color)+FEND+'\n'
+        info_l+='{}\n'.format(' - '*50)+'{}     - locals -     \n'.format('   '*25)+'\n'.join(localslist)+'\n'
     #end
     info_s+=FCOL[15]+'{}\n'.format('---'*(int(t_width*0.2)))+FEND
     info_l+='{}\n'.format('---'*50)   
@@ -598,6 +626,7 @@ def code_eval(expr):
     inftxt=''
     
     if dbg==True and colour_support==1:
+        inftxt+=ml+FCOL[0]+'header with colored background \t<=> type'+FEND+'\n'
         inftxt+=ml+FCOL[0]+'teal or beige colored text \t\t<=> return'+FEND+'\n'
         inftxt+=ml+FCOL[0]+'white colored text \t\t\t<=> stdout'+FEND+'\n'
         inftxt+='\n\n'
@@ -618,6 +647,33 @@ def config_cut(line):
     if(c!=-1):
         line = line[:c]
     return line.strip()
+
+def function_check(name):
+    try:
+        ref = globals()[name]
+        return inspect.isfunction(ref)
+    except KeyError:      
+        return False
+
+#elementwise concationation for lists: e.g. list_econcat(['1','2'],['a','b'], '/', '#', '/') -> ['/1#a/', '/2#b/'] 
+def list_econcat(list_a, list_b, symb_s='', symb_m='', symb_e=''):
+    try:     
+        rlist=[]
+        if len(list_a)!=len(list_b):
+            #we might want to use only one list
+            if list_a=='' and list_b!='':
+                #['test']*n <=> ['test, 'test', ...] or ['test'*n] = ['testtesttest...']
+                list_a = ['']*len(list_b)
+            elif list_a!='' and list_b=='':
+                list_b = ['']*len(list_a)
+            else:
+                error_log('warning: lists have different sizes, elementwise concationation canceled!', locals())    
+        else:
+            for i in range(len(list_a)):
+                rlist.append(symb_s+str(list_a[i])+symb_m+str(list_b[i])+symb_e)
+        return rlist
+    except Exception as exc:     
+        error_log('', locals(), traceback.format_exc())
 
 #Ein Art Prompt für den Nutzer
 def input_format():
@@ -897,7 +953,7 @@ def clean(inpt = 'all'):
         else:
              shell('rm {}/install.out'.format(loc)) 
              
-    return rtxt+'done!'    
+    return rtxt+FCOL[4]+'done!'+FEND    
     
 
 def color_check():
@@ -1003,13 +1059,17 @@ def draw_table(array, size = t_width, offset = 0, factor = 0.8, title='Highlight
         tbl+=ml+'\t'*offset+'{txt:<{pos}}'.format(txt=newl, pos=linesize)+'\n'      
         
     return tbl
-  
+
+#dual use! <=> returns a color-coded list of available/unavailable profiles (e.g. for installation purposes) while also updating pkg_info   
 def avail_pkg(id):
     global pkg_info
+    rlist = []
     avl = len(cfg_profiles[id])
     full = avl
     miss = 0
     err = 0
+    print_menu.updatetime=time.time()
+    pkg_info[id][3] = print_menu.updatetime
     for p in cfg_profiles[id]:
         loadprogress()
         res = shell('{} find '.format(spack_xpth)+p[0][3])
@@ -1022,9 +1082,13 @@ def avail_pkg(id):
             if str(res[0:14])=='==> No package':
                 avl-=1
                 miss+=1
+                rlist.append(FCOL[7]+p[0][0]+FEND)
             elif str(res[0:9])=='==> Error':
                 avl-=1
                 err+=1
+                rlist.append(FCOL[9]+p[0][0]+FEND)
+            else:
+                rlist.append(FCOL[4]+p[0][0]+FEND)
     if avl==full:
         pkg_info[id][0] = FCOL[5]+str(avl)+FEND+'/'+str(full)+FORM[1]+' packages pot. av. '+FEND
     elif avl!=0:
@@ -1039,6 +1103,7 @@ def avail_pkg(id):
         pkg_info[id][2] = FCOL[9]+str(err)+FEND+FORM[1]+' errors'+FEND+')'
     else:
         pkg_info[id][2] = str(err)+FORM[1]+' errors'+FEND+')'
+    return rlist
 
 #Prüft ob ein Pfad existiert 
 def check_path(pth):
@@ -1056,55 +1121,85 @@ Skriptbau-Funktionen
 
 #Default Argument <=> wir wollen alle Profile laufen lassen
 def bench_run(bench_id, farg = 'all', extra_args = ''):
-    #Vorschlag: Überarbeitung der Menü-Ausgabe, vll über eine globale String-Variable, das würde simultane Menü und Flag-Nutzung erlauben
-    #z.B. global menutxt und in der menu-Fkt das printen immer über diese globale Variable
-    #Falls das überhaupt nötig ist...
-    menutxt, tag = '', tag_id_switcher(bench_id)    
+    global menutxt
+    tag = tag_id_switcher(bench_id)    
     pth = get_cfg_path(tag)
     
     """ 
     >>>>>    ÜBERHOLT (läd nur noch nötige profile) <<<<
     >>>>>    ACHTUNG! MENÜ EVTL: ANPASSEN!   <<<<<<<<<<
-    #Aufarbeitung des Argumentstrings
-    if farg == 'all':
-        names = get_cfg_names(pth, tag)
-    else:
-        names = farg_to_list(farg, tag)
     """
-    #Die Liste der Namen der verfügbaren Profile
-    #avail_names = get_cfg_names(pth, tag)
-    #Die Liste der Namen der nicht verfügbaren Profile
-    #unavail_names = []
     
-    #Die Liste der geladenen Profile aus dem Config-Ordner
-    selected_profiles = cfg_profiles[bench_id].copy()   
-    """
-    #Namen von verfügbaren aber nicht ausgewählten Profilnamen
-    unselected_names = []
+    selected_profiles = cfg_profiles[bench_id].copy()
+    
+    #flag-based only loads relevant profiles
+    if menu_ctrl==True:
+        #Namen von verfügbaren aber nicht ausgewählten Profilnamen
+        unselected_names = []
 
-    #Indizes der zu entfernenden Profile
-    dlist=[]
-    
-    for i in range(len(selected_profiles)):
-        #Der Profilname ist nicht in der Liste der zu nutzenden Profile dabei...
-        if selected_profiles[i][0][0] not in names:
-            #...also vormerken zum Entfernen
-            dlist.append(i)
-            unselected_names.append(selected_profiles[i][0][0])
-    dlist.reverse()
-    
-    #Entfernung der unerwünschten Profile
-    for i in dlist:
-        del selected_profiles[i]
-    
-    for name in names:
-        if name not in avail_names:
-            error_log('Profil: '+name+' war nicht verfügbar!', '', '', locals())
-            menutxt+='Profil: '+name+' war nicht verfügbar!'+'\n'
-            unavail_names.append(name)
-    for profile in selected_profiles:
-        menutxt+='Ausgewählt: '+profile[0][0]+'\n'
-    """   
+        #Die Liste der Namen der verfügbaren Profile
+        avail_names = get_cfg_names(pth, tag)
+        #Die Liste der Namen der nicht verfügbaren Profile
+        unavail_names = []
+        
+        #Aufarbeitung des Argumentstrings
+        if farg == 'all':
+            names = get_cfg_names(pth, tag)
+        else:
+            names = farg_to_list(farg, tag)
+
+        #Indizes der zu entfernenden Profile (nicht selektiert)
+        dlist=[]
+        
+        for i in range(len(selected_profiles)):
+            #Der Profilname ist nicht in der Liste der zu nutzenden Profile dabei...
+            if selected_profiles[i][0][0] not in names:
+                #...also vormerken zum Entfernen
+                dlist.append(i)
+                unselected_names.append(selected_profiles[i][0][0])
+        dlist.reverse()
+        
+        #Entfernung der unerwünschten Profile
+        for i in dlist:
+            del selected_profiles[i]
+            
+        if len(selected_profiles)==0:
+            menutxt+='no known profiles were selected!'+'\n'
+            return FCOL[9]+'--- script building was canceled ---'+FEND
+        
+        #Indizes der zu entfernenden Profile
+        dlist=[]
+        
+        for i in range(len(selected_profiles)):
+            if selected_profiles[i][0][2]=='no path found!':
+                problem = ''
+                if dbg==True:
+                    problem = shell('{} find '.format(spack_xpth)+selected_profiles[i][0][3])
+                    if problem.find('Kommando nicht gefunden')>-1 or problem.find('command not found')>-1:
+                        error_log('no valid path to spack binary available!', locals())
+                        menutxt+=FCOL[9]+FORM[0]+'no valid path to spack binary available!'+FEND+'\n'
+                        return FCOL[9]+'--- script building was canceled ---'+FEND
+                    
+                error_log('profile: '+selected_profiles[i][0][0]+' was deselected! (no path known)'+'\n'+problem, locals())
+                menutxt+='profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
+                dlist.append(i)
+                unavail_names.append(selected_profiles[i][0][0])
+        dlist.reverse()
+        
+        for i in dlist:
+            del selected_profiles[i]
+
+        if len(selected_profiles)==0:
+            return FCOL[9]+'--- script building was canceled ---'+FEND
+        
+        """
+        if dbg==True:
+            for name in unselected_names:
+                menutxt+=FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
+            for name in unselected_names:
+                menutxt+=FCOL[6]+name+ml+'(unavailable)'+FEND+'\n'
+        """    
+            
     
     #Skriptbau, ggf. mit zusätzlichen Argumenten
     if extra_args!='':
@@ -1286,7 +1381,8 @@ def install_spec(expr):
     
     #Printen der Job ID klappt noch nicht
     return shell('source {}/share/spack/setup-env.sh ; python3 {}/install.py {} {} ; chmod +x {}/install.sh ; sbatch {}/install.sh'.format(spack_xpth[:-9], loc,meta,expr_[:len(expr_)-1],loc,loc))
-    
+        
+
 
 """
 Menüfunktionen
@@ -1303,7 +1399,6 @@ def print_menu(txt = ''):
     print(ml+'(1)'+mr+' Options')
     print(ml+'(2)'+mr+' Info')
     if (refresh_intervall!=0 and ((time.time()-print_menu.updatetime)>refresh_intervall or print_menu.updatetime==0)) or get_info:
-        print_menu.updatetime=time.time()
         opt_lines=''
         try:         
             for id in range(len(bench_id_list)):
@@ -1311,7 +1406,7 @@ def print_menu(txt = ''):
                     continue
                 avail_pkg(id)
                 get_info = False
-                opt_lines+=ml+'({})'.format(id+2)+mr+' {} ... '.format(tag_id_switcher(id)).upper()+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+'\n'
+                opt_lines+=ml+'({})'.format(id+2)+mr+' {} '.format(tag_id_switcher(id)).upper()+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+'\n'
             print(opt_lines[:-1])
         except Exception as exc:
             error_log('', format(type(exc).__name__), locals(), traceback.format_exc())
@@ -1324,12 +1419,12 @@ def print_menu(txt = ''):
             if id==misc_id:
                 continue
             if id!=misc_id:
-                if (inspect.isfunction(str(tag_id_switcher(id)+'_menu')) and inspect.isfunction('print_'+str(tag_id_switcher(id)+'_menu')))!=True:
-                    implementation_status = FCOL[9]+' --- no menu implementation ---'+FEND
+                if (function_check(tag_id_switcher(id)+'_menu') and function_check('print_'+tag_id_switcher(id)+'_menu'))!=True:
+                    implementation_status = FCOL[9]+' --- no menu implementation --- '+FEND
                 else:
                     implementation_status = ''
             if pkg_info[id][0]!='empty':
-                print(ml+'({})'.format(id+2)+mr+' {} ... '.format(tag_id_switcher(id)).upper()+implementation_status+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+' {}s ago'.format(int(time.time()-print_menu.updatetime)))
+                print(ml+'({})'.format(id+2)+mr+' {} '.format(tag_id_switcher(id)).upper()+implementation_status+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+' {}s ago'.format(int(time.time()-pkg_info[id][3])))
             else:
                 print(ml+'({})'.format(id+2)+mr+' {} '.format(tag_id_switcher(id)).upper()+implementation_status)           
     print(ml+'({})'.format(len(bench_id_list)+2)+mr+' Fehleranzeige '+check_err_stack())
@@ -1375,9 +1470,13 @@ def menu():
             func()    
         elif opt == str(len(bench_id_list)+2):
             elist = ''
+            if len(errorstack)==0:
+                elist = FCOL[4]+'no errors detected! \n'+FEND
+            else:
+                elist = FCOL[9]+'recent errors... \n'+FEND
             while len(errorstack)!=0:
-                elist = elist + '\n' + errorstack.pop()
-            print_menu('Zuletzt aufgetretene Fehler... {}'.format(elist))
+                elist += '\n' + errorstack.pop()
+            print_menu(elist)
         elif opt[0:5] == 'code:':
             r = code_eval(opt[5:])
             print_menu(r)
@@ -1385,7 +1484,7 @@ def menu():
             r = str(shell(opt[1:]))
             print_menu(FBGR[14]+'stdout:'+FEND+'\n'+r)
         else:
-            print_menu(FORM[1]+'Eingabe ungültig: Bitte eine Ganzzahl, z.B. 1'+FEND)   
+            print_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option >>(n) ...<< use the corresponding integer >>input:n<<')   
 
 #Options-Menü
 def print_options_menu(txt = ''):
@@ -1423,7 +1522,7 @@ def options_menu():
             file_w('{}/mem.txt'.format(loc),'form_factor_menu\t\t\t[{}]'.format(str(form_factor_menu)),1)
             calc_terminal_size()
             refresh_format_params()
-            print_options_menu('done!')
+            print_options_menu(FCOL[4]+'done!'+FEND)
         elif opt == '2' or opt == 'refresh-intervall':
             if refresh_intervall!=0:
                 print_options_menu('...current refresh-intervall is {}\n...please insert the new value'.format(refresh_intervall))
@@ -1431,31 +1530,31 @@ def options_menu():
                 print_options_menu('...refresh-intervall is 0: information about package availability won\'t be evaluated!\n...please insert the new value')
             refresh_intervall = int(input_format())
             file_w('{}/mem.txt'.format(loc),'refresh_intervall\t\t\t[{}]'.format(str(refresh_intervall)),2)
-            print_options_menu('done!')
+            print_options_menu(FCOL[4]+'done!'+FEND)
         elif opt == '3' or opt == 'colour':
             if colour_support==1:
                 colour_support = 0
                 file_w('{}/mem.txt'.format(loc),'colour_support\t\t\t[{}]'.format(str(colour_support)),3)
                 color_check()
-                print_options_menu('done!'+FORM[1]+' ...colour & format off'+FEND)
+                print_options_menu(FCOL[4]+'done!'+FEND+FORM[1]+' ...colour & format off'+FEND)
             elif colour_support==0:
                 colour_support = 1
                 file_w('{}/mem.txt'.format(loc),'colour_support\t\t\t[{}]'.format(str(colour_support)),3)
                 color_check()
-                print_options_menu('done!'+FORM[1]+' ...colour & format on'+FEND)
+                print_options_menu(FCOL[4]+'done!'+FEND+FORM[1]+' ...colour & format on'+FEND)
             else:
                 print_options_menu(FCOL[9]+'invalid value! (error)'+FEND+'\n colour_support has to be either 0 or 1!')
         elif opt == '4' or opt == 'debug':
             if dbg==True:
                 debug_mode_switch(0)
                 file_w('{}/mem.txt'.format(loc),'debug_mode\t\t\t[0]',4)
-                print_options_menu('done!'+FORM[1]+' ...debug mode off'+FEND)
+                print_options_menu(FCOL[4]+'done!'+FEND+FORM[1]+' ...debug mode off'+FEND)
             else:
                 debug_mode_switch(1)
                 file_w('{}/mem.txt'.format(loc),'debug_mode\t\t\t[1]',4)
-                print_options_menu('done!'+FORM[1]+' ...debug mode on'+FEND)
+                print_options_menu(FCOL[4]+'done!'+FEND+FORM[1]+' ...debug mode on'+FEND)
         elif opt == '5' or opt == 'show':
-            i = 0
+            #i = 0
             txt=ml+FCOL[13]+FORM[0]+'which bench do you wish to inspect?'+FEND
             txt+='\n\n'+ml+FBGR[0]+'possible choices:'+FEND+'\n'+ml
             left_size=t_width-len(ml)
@@ -1474,7 +1573,7 @@ def options_menu():
         elif opt == '8' or opt == 'clean projects':
             print_options_menu(clean('projects'))
         else:
-            print_hpl_menu(FORM[1]+'Eingabe ungültig: Bitte eine Ganzzahl zw. 0-6, z.B. 1'+FEND)
+            print_hpl_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option >>(n) ...<< use the corresponding integer >>input:n<<')
 
 #OSU-Menü
 def print_osu_menu(txt = ''):
@@ -1502,7 +1601,7 @@ def osu_menu():
             print_menu()
             break
         elif opt == '1' or opt == 'run':
-            print('Info: Noch nicht implementiert...')
+            print('info: not implemented yet!')
             #Funktioniert sicher anders als bei HPL, das wäre die dortige Variante...
             #Formatierungskonzept aber bitte kopieren
         elif opt == '2' or opt == 'view':
@@ -1510,7 +1609,7 @@ def osu_menu():
         elif opt == '3'or opt == 'install':
             print_osu_menu('Welche specs sollen installiert werden?\n'+install_spec(str(input_format())))
         else:
-            print_osu_menu(FORM[1]+'Eingabe ungültig: Bitte eine Ganzzahl zw. 0-3, z.B. 1'+FEND)
+            print_osu_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option >>(n) ...<< use the corresponding integer >>input:n<<')
 
 #HPL-Menü
 def print_hpl_menu(txt = ''):
@@ -1538,12 +1637,13 @@ def hpl_menu():
             print_menu()
             break
         elif opt == '1' or opt == 'run':
-            i = 0
-            txt=ml+FCOL[13]+'which profiles do you wish to run?'+FEND
-            txt+=ml+FCOL[0]+'\n'+'how to reference profiles: '+ml+'\ne.g. hpl_cfg_test.txt => test \n'+ml+'e.g. hpl_cfg_1.txt,hpl_cfg_2.txt,...,hpl_cfg_5.txt => 1-5 \n'+ml+'e.g. valid input: 1-3,test,9\n'+FEND
+            #i = 0
+            txt=ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: >>1-3,test,9<<\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
             txt+='\n\n'+ml+FBGR[0]+'found profiles:'+FEND+'\n'+ml
             left_size=t_width-len(ml)
-            for name in get_cfg_names(bench_pths[hpl_id],tag_id_switcher(hpl_id)):
+            for name in avail_pkg(hpl_id):
                 if left_size<len(name+mr):
                     left_size-=len(ml)
                     txt+='\n'+ml
@@ -1554,11 +1654,13 @@ def hpl_menu():
         elif opt == '2' or opt == 'view':
             print_hpl_menu(view_installed_specs(tag_id_switcher(hpl_id)))
         elif opt == '3'or opt == 'install':           
-            txt=ml+FCOL[13]+'which profiles do you wish to install?'+FEND
-            txt+=ml+FCOL[0]+'\n'+'how to reference profiles: '+ml+'\ne.g. hpl_cfg_test.txt => test \n'+ml+'e.g. hpl_cfg_1.txt,hpl_cfg_2.txt,...,hpl_cfg_5.txt => 1-5 \n'+ml+'e.g. valid input: 1-3,test,9\n'+FEND
+            txt=ml+FCOL[13]+FORM[0]+'which profiles do you wish to install?\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: >>1-3,test,9<<\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
             txt+='\n\n'+ml+FBGR[0]+'found profiles:'+FEND+'\n'+ml
             left_size=t_width-len(ml)
-            for name in get_cfg_names(bench_pths[hpl_id],tag_id_switcher(hpl_id)):
+            #for name in get_cfg_names(bench_pths[hpl_id],tag_id_switcher(hpl_id)):
+            for name in avail_pkg(hpl_id):
                 if left_size<len(name+mr):
                     left_size-=len(ml)
                     txt+='\n'+ml
@@ -1572,11 +1674,11 @@ def hpl_menu():
                 expr=get_all_specs('hpl')
             else:
                 names=farg_to_list(expr,'hpl')
-                expr=get_all_specs('hpl',names)
+                expr=get_all_specs('hpl',names)   
             print_hpl_menu(install_spec(expr))
             
         else:
-            print_hpl_menu(FORM[1]+'Eingabe ungültig: Bitte eine Ganzzahl zw. 0-3, z.B. 1'+FEND)
+            print_hpl_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option >>(n) ...<< use the corresponding integer >>input:n<<')
 
 
     
