@@ -151,37 +151,30 @@ def cl_arg():
     
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument('-i','--install',nargs='+',type=str,help=''+
-    FCOL[15]+
-    '<Benchmark> <cfg>,<cfg>,...,<cfg>\n'+
-    FEND+
-    FCOL[13]+
-    '     e.g.: -i hpl 1,3-4,example\n\n'+
-    FEND+
-    FCOL[15]+
-    'all: Install all benchmarks/cfg\n'+
-    FEND+
-    FCOL[13]+
-    '     e.g.: -i all\n'+
-    '           -i osu all\n\n'+
-    FEND)
+    FCOL[15]+'<Benchmark> <cfg>,<cfg>,...,<cfg>\n'+FEND+ 
+    FCOL[2]+'     e.g.: -i hpl 1,3-4,example\n\n'+FEND+    
+    FCOL[15]+'all: Install all benchmarks or profiles\n'+FEND+    
+    FCOL[2]+'     e.g.: -i all\n'+
+    '           -i osu all\n\n'+FEND)
     
-    parser.add_argument('-r','--run',nargs='+',type=str,help=''+   
-    'hpl <cfg>,<cfg>,...,<cfg>\n'+     
-    '     e.g.: -r hpl 1,3-4,Test1\n' +
-    '           -r hpl all <=> -r hpl\n\n' +
-    'osu <test> <cfg>,<cfg>,...,<cfg> \n'+
-    '     tests:{latency, bw, bcast, barrier, allreduce}\n'+
-    '     e.g.: -r osu latency 1,3-4,example\n'+
-    '           -r osu latency all <=> -r osu latency\n')
+    parser.add_argument('-r','--run',nargs='+',type=str,help=''+
+    FCOL[15]+'hpl <cfg>,<cfg>,...,<cfg>\n'+FEND+
+    FCOL[2]+'     e.g.: -r hpl 1,3-4,Test1\n'+
+    '           -r hpl all <=> -r hpl\n\n'+
+    FCOL[15]+'osu <test> <cfg>,<cfg>,...,<cfg> \n'+FEND+
+    FCOL[7]+'     tests: {latency, bw, bcast, barrier, allreduce}\n'+FEND+
+    FCOL[2]+'     e.g.: -r osu latency 1,3-4,example\n'+
+    '           -r osu latency all <=> -r osu latency\n'+FEND)
     
     parser.add_argument('-c','--clean',nargs=1,type=str,help=''+
-    'projects: remove projects folder\n'+
-    'install: remove all install scripts\n'+
-    'log: remove log.txt (error-log file)\n' +
-    'mem: remove mem.txt (run time variables)\n'+
-    'all: remove projects, install scripts, log.txt, not mem.txt!\n'+
-    '     e.g.: -c projects\n'+
-    '     e.g.: -c all\n')
+    FCOL[15]+'removes some files\n'+FEND+  
+    '  '+FCOL[7]+'projects:'+FEND+' removes projects folder\n'+
+    '  '+FCOL[7]+'install:'+FEND+'  removes all install scripts\n'+
+    '  '+FCOL[7]+'log:'+FEND+' cleans log.txt (error-log file)\n' +
+    '  '+FCOL[7]+'mem:'+FEND+' resets mem.txt (run time variables)\n'+
+    '  '+FCOL[7]+'all:'+FEND+' cleans projects folder, install scripts and log.txt,'+FCOL[13]+' not mem.txt!\n'+FEND+     
+    '     '+FCOL[2]+'e.g.: -c projects\n'+
+    '           -c all\n'+FEND)
     
     evaluate_paths()
     args= parser.parse_args()
@@ -1423,7 +1416,7 @@ def check_expr_syn(expr):
 #Übergibt alle benötigen Argumente an Install.py
 def install_spec(expr):  
     #Slurmparameter 
-    meta=cfg_profiles[0][0][2][0]+'#'+cfg_profiles[0][0][2][1]+'#'+cfg_profiles[0][0][2][2]+'#'+cfg_profiles[0][0][2][3]+'#'+spack_xpth[:-9]   
+    meta=cfg_profiles[0][0][2][0]+'#'+cfg_profiles[0][0][2][1]+'#'+cfg_profiles[0][0][2][2]+'#'+cfg_profiles[0][0][2][3]+'#'+spack_xpth[:-9]
     expr_=''
     timer=0
     #String aller Specs
@@ -1793,5 +1786,9 @@ def get_mem_digit(pos):
 """
 
 #Startpunkt
-clear()
-cl_arg()
+def main():
+    clear()
+    cl_arg()
+    
+if __name__ == "__main__":
+    main()
