@@ -227,7 +227,8 @@ def cl_arg():
         print(install_spec(expr))
     
     #Run Benchmarks
-    if args.run:        
+    if args.run:
+        pth=''
         args_len=len(args.run)        
         
         #run benchmarks without extra arguments
@@ -235,23 +236,26 @@ def cl_arg():
             if args_len < 2 or args.run[1]=='all':
                 get_cfg(args.run[0])
                 pth=bench_run(tag_id_switcher(args.run[0]),'all') 
-                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+                
             else:
                 get_cfg(args.run[0],args.run[1])               
                 pth=bench_run(tag_id_switcher(args.run[0]),args.run[1])
-                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+                
        
         #run benchmarks with extra arguments
         else:
             if args.run[0]=='osu':
                 if args_len < 3 or args.run[2]=='all':
-                    get_cfg(args.run[0])
-                    pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[1])
-                    print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+                    get_cfg(args.run[0])                    
+                    pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[1])                                       
                 else:
                     get_cfg(args.run[0],args.run[2])
-                    pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])
-                    print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+                    pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])                    
+                    
+        
+        print(menutxt)
+        if pth!='':
+            print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
         
         
     #Start via Menu   
@@ -1200,7 +1204,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
                 menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
                 return ''
             error_log('profile: '+selected_profiles[i][0][0]+' was deselected! (no path known)'+'\n'+problem, locals())
-            menutxt+='\n'+'profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
+            menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
             dlist.append(i)
             unavail_names.append(selected_profiles[i][0][0])
     dlist.reverse()
@@ -1231,7 +1235,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
         menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n\n'    
     
     #shell('sbatch '+skript) <--- sollte umgebaut werden sobald der Rest stimmt
-    return ''
+    return skript
 
 #Hiermit soll das Skript gebaut werden 
 def build_batch(selected_profiles, bench_id, extra_args = ''):  
@@ -1364,7 +1368,7 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output)
     elif bench_id==hpcg_id:
         #we will have access issues regarding hpcg.dat if we don't change directory to bin_path, maybe there's a nicer solution
         txt+='cd {}'.format(bin_path)+'\n'
-        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_reference, out=output)
+        txt+='mpirun -np {pcount} {bpath}xhpcg'.format(pcount = proc_count, bpath = bin_reference, out=output)
     
     return txt
 
@@ -1711,7 +1715,13 @@ def hpl_menu():
                 txt+=FORM[0]+name+FEND+mr
                 left_size-=len(name+mr)
             print_hpl_menu(txt)
-            print_hpl_menu(bench_run(hpl_id, input_format().replace(' ','')))                         
+            scr_pth = bench_run(hpl_id, input_format().replace(' ',''))
+            print_hpl_menu('')
+            """
+            txt=ml+FCOL[13]+FORM[0]+'hand over the batch-script to SLURM? (y/n)\n\n'+FEND
+            print_hpl_menu(txt)
+            print_hpl_menu(shell('srun '+scr_pth))
+            """
         elif opt == '2' or opt == 'view':
             print_hpl_menu(view_installed_specs(tag_id_switcher(hpl_id)))
         elif opt == '3'or opt == 'install':           
