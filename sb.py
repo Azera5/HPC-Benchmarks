@@ -235,12 +235,10 @@ def cl_arg():
         if tag_id_switcher(args.run[0]) in benchs_without_exarg: 
             if args_len < 2 or args.run[1]=='all':
                 get_cfg(args.run[0])
-                pth=bench_run(tag_id_switcher(args.run[0]),'all') 
-                
+                pth=bench_run(tag_id_switcher(args.run[0]),'all')                
             else:
                 get_cfg(args.run[0],args.run[1])               
-                pth=bench_run(tag_id_switcher(args.run[0]),args.run[1])
-                
+                pth=bench_run(tag_id_switcher(args.run[0]),args.run[1])                
        
         #run benchmarks with extra arguments
         else:
@@ -250,8 +248,7 @@ def cl_arg():
                     pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[1])                                       
                 else:
                     get_cfg(args.run[0],args.run[2])
-                    pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])                    
-                    
+                    pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])
         
         print(menutxt)
         if pth!='':
@@ -1263,8 +1260,9 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     #Bauen des Batch-Skripts, anhand der Parameter aus der allgemeinen Config
     batchtxt=write_slurm_params(cfg_profiles[0][0], 'batchskript')
     batchtxt+='#SBATCH --job-name='+tag+'_run'+'['+tstamp+']'+'\n'
-    batchtxt+='#SBATCH --output='+run_dir+tag+'_run'+'['+tstamp+']'+'.out'+'\n'
-    batchtxt+='#SBATCH --error='+run_dir+tag+'_run'+'['+tstamp+']'+'.err'+'\n\n'  
+    batchtxt+='#SBATCH --output=/dev/null\n'#+run_dir+tag+'_run'+'['+tstamp+']'+'.out'+'\n'
+    batchtxt+='#SBATCH --error='+run_dir+tag+'_run_batchscript.err\n\n'  
+    #batchtxt+='#SBATCH --error='+run_dir+tag+'_run'+'['+tstamp+']'+'.err'+'\n\n'  
     
     #Einzelne Jobskripte je Profil
     for profile in selected_profiles:    
@@ -1289,10 +1287,10 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
         elif len(extra_args)==0:
             batchtxt+=build_job(profile, bench_id, run_dir, res_dir)+')\n'        
     
-    batchtxt+='source {}/share/spack/setup-env.sh\n'.format(spack_xpth[:-9])
+    batchtxt+='\nsource {}/share/spack/setup-env.sh\n'.format(spack_xpth[:-9])
     batchtxt+='spack load python '+find_matplot_python_hash()+'\n'
     batchtxt+='sbatch --dependency=afterany:${id'+str(len(selected_profiles)-1)+'##* } ' + build_plot(tstamp,tag_id_switcher(bench_id),run_dir)
-    #batchtxt+='sbatch --dependency=afterany:${id'+str(len(selected_profiles)-1)+'##* } python3 plot.py '+tstamp+' '+tag_id_switcher(bench_id) 
+    #batchtxt+='srun -d afterany:${id'+str(len(selected_profiles)-1)+'##* }'+' python3 {}/plot.py {} {}'.format(loc,tstamp,tag_id_switcher(bench_id))
     
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
@@ -1319,8 +1317,11 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
         #Jobname (<=> Profilname)
         jobtxt+='#SBATCH --job-name={}\n'.format(profile[0][0][:-4])
         #Ziel für Output (sollte in (...)[results] landen)
-        if profile[3][10]=='':
+        if profile[3][10]=='' and bench_id != hpcg_id:
             jobtxt+='#SBATCH --output={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.out')
+        #Output wird für hpcg manuell in execute_line() gehandelt
+        if bench_id == hpcg_id:
+            jobtxt+='#SBATCH --output=/dev/null\n'
         #Ziel für Fehler (sollte in (...)[results] landen)
         if profile[3][11]=='':
             jobtxt+='#SBATCH --error={}\n'.format(res_dir+'/'+profile[0][0][:-4]+'.err')
@@ -1331,7 +1332,7 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
         jobtxt+= 'spack load {}\n'.format(profile[0][3])   
         jobtxt+='\n'
         #Skriptzeile in der eine Binary ausgeführt wird
-        jobtxt+=execute_line(bench_id, bin_path, profile[3][1], profile[3][2], extra_args, res_dir+profile[0][0][:-4]+'.out')
+        jobtxt+=execute_line(bench_id, bin_path, profile[3][1], profile[3][2], extra_args, res_dir+profile[0][0][:-4]+'.out',res_dir)
         #TODO: Entladen von Modulen, nötig? Das ist ja ein abgeschlossenes Jobscript...
         #jobtxt+= 'spack unload {}\n'.format(profile[0][3])
     else:
@@ -1345,7 +1346,7 @@ def build_job(profile, bench_id, run_dir, res_dir, extra_args = ''):
         shell('chmod +x '+run_dir+'{}.sh'.format(profile[0][0][:-4]))
     return run_dir+'{}.sh'.format(profile[0][0][:-4])
 
-def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output):
+def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output,res_dir):
 
     """ 
     >>>>>   script building pipeline (4/5)           <<<<
@@ -1362,13 +1363,14 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output)
     if bench_id==hpl_id:
         #we will have access issues regarding hpl.dat if we don't change directory to bin_path, maybe there's a nicer solution
         txt+='cd {}'.format(bin_path)+'\n'
-        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_reference, out=output)        
+        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_reference)        
     elif bench_id==osu_id:
-        txt+='mpirun -n {ncount} osu_{exargs}'.format(ncount=node_count,exargs=extra_args,out=output)
+        txt+='mpirun -n {ncount} osu_{exargs}'.format(ncount=node_count,exargs=extra_args)
     elif bench_id==hpcg_id:
-        #we will have access issues regarding hpcg.dat if we don't change directory to bin_path, maybe there's a nicer solution
-        txt+='cd {}'.format(bin_path)+'\n'
-        txt+='mpirun -np {pcount} {bpath}xhpcg'.format(pcount = proc_count, bpath = bin_reference, out=output)
+        #All results are automatically saved in the execution directory, maybe there's a nicer solution
+        txt+='cd {}'.format(res_dir)+'\n'
+        txt+='id0=$(mpirun -np {pcount} {bpath}xhpcg)\n'.format(pcount = proc_count, bpath = bin_reference, out=output)
+        txt+='srun -d afterany:${id0##* }'+' mv HPCG*.txt {}; mv hpcg*.txt {}hpcg_meta@{}.txt'.format(output,output[:output.rfind('/')],output[output.rfind('/')-1:-4])
     
     return txt
 
@@ -1382,12 +1384,11 @@ def build_plot(tstamp, bench,run_dir):
 
     jobtxt=write_slurm_params(cfg_profiles[0][0], 'plotskript')
     jobtxt+='#SBATCH --job-name='+bench+'_plot\n' 
-    jobtxt+='#SBATCH --error='+run_dir+bench+'_plot.err\n\n'
-    jobtxt+='#SBATCH --output='+run_dir+'plot.out'+'\n'
-    jobtxt+='#SBATCH --error='+run_dir+'plot.err'+'\n\n'     
+    jobtxt+='#SBATCH --error='+run_dir+bench+'_plot.err\n\n'   
+    jobtxt+='#SBATCH --output=/dev/null\n\n'#+run_dir+bench+'_plot.out'+'\n\n'    
     jobtxt+= 'python3 {}/plot.py '.format(loc)+tstamp+' '+bench
     
-    #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
+    #Niederschreiben des Skripts & Rückgabe des entspr. Pfads
     if os.path.isdir(run_dir[:-1])==True:
         file_w(run_dir+bench+'{}.sh'.format('_plotskript'),jobtxt,'a')
         shell('chmod +x '+run_dir+bench+'{}.sh'.format('_plotskript'))
