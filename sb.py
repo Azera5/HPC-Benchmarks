@@ -1364,7 +1364,7 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output)
     elif bench_id==hpcg_id:
         #we will have access issues regarding hpcg.dat if we don't change directory to bin_path, maybe there's a nicer solution
         txt+='cd {}'.format(bin_path)+'\n'
-        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_reference, out=output)
+        txt+='mpirun -np {pcount} {bpath}xhpcg'.format(pcount = proc_count, bpath = bin_reference, out=output)
     
     return txt
 
