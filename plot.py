@@ -101,6 +101,8 @@ def read_hpl(profiles):
 
 def read_hpcg(profiles):
     values = [[],[]]
+    nodes='?'
+    cpus_per_task='?'
     for name in profiles:
         if os.stat(name).st_size == 0:
             continue
@@ -109,8 +111,23 @@ def read_hpcg(profiles):
         with open(name,'r') as f:
             stringlist = f.readlines() 
         
-        #Profilmerkmale UND NAME TODO#####
-        values[1][len(values[1])-1][2]='test: {}'.format(name[name.rfind('/')+5:-4])                        
+        #reads number of nodes and cpus-per-task from slurm script
+        with open(name.replace('results','run').replace('.out','.sh')) as f:
+            for line_index, line in enumerate(f):
+                if '--nodes=' in line:
+                    nodes=line.split('=')[1][:-2]                    
+                
+                elif '-N ' in line:
+                    nodes=line.split()[1][:-2]
+                
+                elif '--cpus-per-task=' in line:
+                    cpus_per_task=line.split('=')[1][:-2]
+                
+                elif '-c ' in line:
+                    cpus_per_task=line.split()[1][:-2]
+                    
+        #Profilmerkmale Number of processes, threads and nodes, cpus_per_task      
+        values[1][len(values[1])-1][2]='proc {}; thre {}\nN:{}, c:{} ({})'.format(stringlist[4].split('=')[1][:-2],stringlist[5].split('=')[1][:-2],nodes,cpus_per_task,name[name.rfind('/')+5:-4])                        
            
         #Results
         val=float(stringlist[118].split('=')[1])
