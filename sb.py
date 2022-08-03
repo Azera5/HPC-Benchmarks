@@ -434,7 +434,6 @@ def find_matplot_python_hash():
         sourcen='source {}/share/spack/setup-env.sh; '.format(spack_xpth[:-9])
         py=shell('find '+pth_spack+' -name python | grep bin').split('\n')
         count=len(py)-1
-        print(count)
         #Eine Pythonversion vorhanden
         if  count==1:
             print(shell(sourcen+'spack load python; python -m pip install matplotlib'))
