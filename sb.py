@@ -148,6 +148,7 @@ Command-Line-Parameter
 """
 def cl_arg():
     global cfg_profiles, menu_ctrl
+    benchs_without_exarg =[hpl_id,hpcg_id]
     
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument('-i','--install',nargs='+',type=str,help=''+
@@ -164,7 +165,10 @@ def cl_arg():
     FCOL[15]+'osu <test> <cfg>,<cfg>,...,<cfg> \n'+FEND+
     FCOL[7]+'     tests: {latency, bw, bcast, barrier, allreduce}\n'+FEND+
     FCOL[2]+'     e.g.: -r osu latency 1,3-4,example\n'+
-    '           -r osu latency all <=> -r osu latency\n'+FEND)
+    '           -r osu latency all <=> -r osu latency\n\n'+
+    FCOL[15]+'hpcg <cfg>,<cfg>,...,<cfg>\n'+FEND+
+    FCOL[2]+'     e.g.: -r hpcg 1,3-4,Test1\n'+
+    '           -r hpcg all <=> -r hpcg\n\n'+FEND)
     
     parser.add_argument('-c','--clean',nargs=1,type=str,help=''+
     FCOL[15]+'removes some files\n'+FEND+  
@@ -224,8 +228,8 @@ def cl_arg():
     if args.run:        
         args_len=len(args.run)        
         
-        #run hpl
-        if args.run[0]=='hpl':            
+        #run benchmarks without extra arguments
+        if tag_id_switcher(args.run[0]) in benchs_without_exarg: 
             if args_len < 2 or args.run[1]=='all':
                 get_cfg(args.run[0])
                 pth=bench_run(tag_id_switcher(args.run[0]),'all') 
@@ -235,16 +239,18 @@ def cl_arg():
                 pth=bench_run(tag_id_switcher(args.run[0]),args.run[1])
                 print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
        
-        #run osu
-        if args.run[0]=='osu':
-            if args_len < 3 or args.run[2]=='all':
-                get_cfg(args.run[0])
-                pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[1])
-                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
-            else:
-                get_cfg(args.run[0],args.run[2])
-                pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])
-                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+        #run benchmarks with extra arguments
+        else:
+            if args.run[0]=='osu':
+                if args_len < 3 or args.run[2]=='all':
+                    get_cfg(args.run[0])
+                    pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[1])
+                    print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+                else:
+                    get_cfg(args.run[0],args.run[2])
+                    pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])
+                    print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+        
         
     #Start via Menu   
     if not args.install and not args.run and not args.clean:
