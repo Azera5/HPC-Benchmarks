@@ -76,6 +76,8 @@ menutxt=''
 dbg=True
 #Steuern wir über Menü oder Flags?
 menu_ctrl=False
+#Erzwingen wir volle Pfade in Stufe (4/5) der Skriptbau-Pipeline oder nicht?
+full_bin_paths=False
 
 #Schriftfarb-Konstanten
 """
@@ -597,10 +599,10 @@ def check_status():
                 continue
             if os.path.isfile(loc+'/projects/'+str(d)+'/ready_signal')==True:
                 print('#In diesem Ordner gab es ein Signal!')
-                menutxt+=ml+FBGR[13]+str(d)+' is ready!'+FEND+'\n'
+                menutxt+=FBGR[13]+str(d)+' is ready!'+FEND+'\n'
                 if dbg==True:
                     print('#Wir setzen noch einen Zeitstempel')
-                    menutxt+=ml+FCOL[15]+os.path.getmtime(loc+'/projects/'+str(d)+'/ready_signal')+FEND+'\n'
+                    menutxt+=FCOL[15]+os.path.getmtime(loc+'/projects/'+str(d)+'/ready_signal')+FEND+'\n'
     else:
         print('#nichts passiert')
         menutxt+=''
@@ -783,7 +785,7 @@ def tag_id_switcher(bench):
         return switcher.get(bench) 
     
     except KeyError:
-        menutxt+=ml+FCOL[9]+FORM[0]+'---unkown bench type---'+FEND
+        menutxt+=FCOL[9]+FORM[0]+'---unkown bench type---'+FEND
         error_log('a unkown bench-reference was used: '+str(bench), locals(), traceback.format_exc())
         return '-1'
 
@@ -1175,9 +1177,9 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
             del selected_profiles[i]
             
         if len(selected_profiles)==0:
-            menutxt+=ml+'no known profiles were selected!'+'\n'
-            menutxt+=ml+FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND
-            return '-1'
+            menutxt+=FCOL[6]+'no known profiles were selected!'+FEND+'\n'
+            menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
+            return ''
         
     #indices list for profiles not available for our current run
     #this second check is relevant for flag-based execution too
@@ -1188,11 +1190,11 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
             problem = shell('{} find '.format(spack_xpth)+selected_profiles[i][0][3])
             if problem.find('Kommando nicht gefunden')>-1 or problem.find('command not found')>-1:
                 error_log('no valid path to spack binary available!', locals())
-                menutxt+=ml+FCOL[9]+FORM[0]+'no valid path to spack binary available!'+FEND+'\n'
-                menutxt+=ml+FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND
-                return '-1'
+                menutxt+=FCOL[9]+FORM[0]+'no valid path to spack binary available!'+FEND+'\n'
+                menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
+                return ''
             error_log('profile: '+selected_profiles[i][0][0]+' was deselected! (no path known)'+'\n'+problem, locals())
-            menutxt+=ml+'profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
+            menutxt+='\n'+'profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
             dlist.append(i)
             unavail_names.append(selected_profiles[i][0][0])
     dlist.reverse()
@@ -1202,27 +1204,28 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
         del selected_profiles[i]
 
     if len(selected_profiles)==0:
-        menutxt+=ml+FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND
-        return '-1'
+        menutxt+=FCOL[6]+'no selected profiles were available!'+FEND+'\n'
+        menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
+        return ''
     
     if dbg==True and menu_ctrl==True:
-        menutxt+='\n\n'+ml+FCOL[15]+'--- '+'summary'+' ---'+FEND+'\n'
+        menutxt+='\n\n'+FCOL[15]+'--- '+'summary'+' ---'+FEND+'\n\n'
         for name in unselected_names:
-            menutxt+=ml+FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
-        for name in unselected_names:
-            menutxt+=ml+FCOL[6]+name+ml+'(deselected)'+FEND+'\n'    
+            menutxt+=FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
+        for name in unavail_names:
+            menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'    
             
     
     #Skriptbau, ggf. mit zusätzlichen Argumenten
     if extra_args!='':
         skript=build_batch(selected_profiles, bench_id, extra_args)
-        menutxt+='\n'+ml+FCOL[4]+'script building completed:\n'+FEND+ml+FORM[0]+FCOL[3]+skript+FEND+'\n\n'
+        menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n\n'
     else:
         skript=build_batch(selected_profiles, bench_id)
-        menutxt+='\n'+ml+FCOL[4]+'script building completed:\n'+FEND+ml+FORM[0]+FCOL[3]+skript+FEND+'\n\n'    
+        menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n\n'    
     
     #shell('sbatch '+skript) <--- sollte umgebaut werden sobald der Rest stimmt
-    return skript
+    return ''
 
 #Hiermit soll das Skript gebaut werden 
 def build_batch(selected_profiles, bench_id, extra_args = ''):  
@@ -1339,18 +1342,23 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output)
     >>>>>   final design of the execution line       <<<<
     >>>>>   individual handling per benchmark        <<<<
     """
+    
+    if full_bin_paths:
+        bin_reference = bin_path
+    else:
+        bin_reference = ''
 
     txt = ''    
     if bench_id==hpl_id:
         #we will have access issues regarding hpl.dat if we don't change directory to bin_path, maybe there's a nicer solution
         txt+='cd {}'.format(bin_path)+'\n'
-        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path,out=output)        
+        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_reference, out=output)        
     elif bench_id==osu_id:
         txt+='mpirun -n {ncount} osu_{exargs}'.format(ncount=node_count,exargs=extra_args,out=output)
     elif bench_id==hpcg_id:
         #we will have access issues regarding hpcg.dat if we don't change directory to bin_path, maybe there's a nicer solution
         txt+='cd {}'.format(bin_path)+'\n'
-        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_path,out=output)
+        txt+='mpirun -np {pcount} {bpath}xhpl'.format(pcount = proc_count, bpath = bin_reference, out=output)
     
     return txt
 
@@ -1473,7 +1481,7 @@ def print_menu(txt = ''):
                 print(ml+'({})'.format(id+2)+mr+' {} '.format(tag_id_switcher(id)).upper()+implementation_status)           
     print(ml+'({})'.format(len(bench_id_list)+2)+mr+' Fehleranzeige '+check_err_stack())
     print(' ')
-    print(menutxt+str(txt))
+    print(menutxt.replace('\n','\n'+ml)+str(txt))
     #angesammelte Nachrichten leeren...
     menutxt=''
 print_menu.updatetime=0
@@ -1550,7 +1558,7 @@ def print_options_menu(txt = ''):
     print(ml+'(7)'+mr+' clean error-log (log.txt)')
     print(ml+'(8)'+mr+' clean projects')
     print(' ')
-    print(menutxt+str(txt))
+    print(menutxt.replace('\n','\n'+ml)+'\n'+str(txt))
     #angesammelte Nachrichten leeren...
     menutxt=''
 
@@ -1634,7 +1642,7 @@ def print_osu_menu(txt = ''):
     print(ml+'(2)'+mr+' view installed packages')
     print(ml+'(3)'+mr+' install packages')
     print(' ')
-    print(menutxt+str(txt))
+    print(menutxt.replace('\n','\n'+ml)+str(txt))
     #angesammelte Nachrichten leeren...
     menutxt=''
 
@@ -1670,7 +1678,7 @@ def print_hpl_menu(txt = ''):
     print(ml+'(2)'+mr+' view installed packages')
     print(ml+'(3)'+mr+' install packages')
     print(' ')
-    print(menutxt+str(txt))
+    print(menutxt.replace('\n','\n'+ml)+str(txt))
     #angesammelte Nachrichten leeren...
     menutxt=''
 
