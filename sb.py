@@ -1371,10 +1371,10 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output,
     elif bench_id==osu_id:
         txt+='mpirun -n {ncount} osu_{exargs}'.format(ncount=node_count,exargs=extra_args)
     elif bench_id==hpcg_id:
-        #All results are automatically saved in the execution directory, maybe there's a nicer solution
+        #All results are automatically saved in the execution directory
         txt+='cd {}'.format(res_dir)+'\n'
         txt+='id0=$(mpirun -np {pcount} {bpath}xhpcg)\n'.format(pcount = proc_count, bpath = bin_reference, out=output)
-        txt+='srun -d afterany:${id0##* }'+' mv HPCG*.txt {}; mv hpcg*.txt {}hpcg_meta@{}.txt'.format(output,output[:output.rfind('/')],output[output.rfind('/')-1:-4])
+        txt+='srun -d afterany:${id0##* }'+' mv HPCG*.txt {}; mv hpcg*.txt {}hpcg_meta@{}.txt'.format(output,output[:output.rfind('/')],output[output.rfind('/')+1:-4])
     
     return txt
 
