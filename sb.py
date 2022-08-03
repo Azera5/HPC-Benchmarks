@@ -227,7 +227,8 @@ def cl_arg():
         print(install_spec(expr))
     
     #Run Benchmarks
-    if args.run:        
+    if args.run:
+        pth=''
         args_len=len(args.run)        
         
         #run benchmarks without extra arguments
@@ -235,23 +236,26 @@ def cl_arg():
             if args_len < 2 or args.run[1]=='all':
                 get_cfg(args.run[0])
                 pth=bench_run(tag_id_switcher(args.run[0]),'all') 
-                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+                
             else:
                 get_cfg(args.run[0],args.run[1])               
                 pth=bench_run(tag_id_switcher(args.run[0]),args.run[1])
-                print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+                
        
         #run benchmarks with extra arguments
         else:
             if args.run[0]=='osu':
                 if args_len < 3 or args.run[2]=='all':
-                    get_cfg(args.run[0])
-                    pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[1])
-                    print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+                    get_cfg(args.run[0])                    
+                    pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[1])                                       
                 else:
                     get_cfg(args.run[0],args.run[2])
-                    pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])
-                    print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+                    pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])                    
+                    
+        
+        print(menutxt)
+        if pth!='':
+            print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
         
         
     #Start via Menu   
