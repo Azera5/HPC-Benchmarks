@@ -20,7 +20,7 @@ import traceback
 """
 Hilfsvariablen
 """
-#supported benchmarks (HPL, OSU, ...) and their corresponding IDs
+#supported benchmarks (HPL, OSU, ...) and their IDs
 benchcount = 2
 misc_id = 0
 hpl_id = 1
@@ -798,7 +798,7 @@ def tag_id_switcher(bench):
     
     except KeyError:
         menutxt+=FCOL[9]+FORM[0]+'---unkown bench type---'+FEND
-        error_log('a unkown bench-reference was used: '+str(bench), locals(), traceback.format_exc())
+        error_log('an unkown bench-reference was used: '+str(bench), locals(), traceback.format_exc())
         return '-1'
 
 #Configpfad
@@ -1374,7 +1374,7 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output,
         #All results are automatically saved in the execution directory
         txt+='cd {}'.format(res_dir)+'\n'
         txt+='id0=$(mpirun -np {pcount} {bpath}xhpcg)\n'.format(pcount = proc_count, bpath = bin_reference, out=output)
-        txt+='srun -d afterany:${id0##* }'+' mv HPCG*.txt {}; mv hpcg*.txt {}hpcg_meta@{}.txt'.format(output,output[:output.rfind('/')],output[output.rfind('/')+1:-4])
+        txt+='srun -d afterany:${id0##* }'+' mv HPCG*.txt {}; mv hpcg*.txt {}/hpcg_meta@{}.txt'.format(output,output[:output.rfind('/')],output[output.rfind('/')+1:-4])
     
     return txt
 
