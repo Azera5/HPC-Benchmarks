@@ -115,19 +115,19 @@ def read_hpcg(profiles):
         with open(name.replace('results','run').replace('.out','.sh')) as f:
             for line_index, line in enumerate(f):
                 if '--nodes=' in line:
-                    nodes=line.split('=')[1][:-2]                    
+                    nodes=line.split('=')[1][:-1]                    
                 
                 elif '-N ' in line:
-                    nodes=line.split()[1][:-2]
+                    nodes=line.split()[1][:-1]
                 
                 elif '--cpus-per-task=' in line:
-                    cpus_per_task=line.split('=')[1][:-2]
+                    cpus_per_task=line.split('=')[1][:-1]
                 
                 elif '-c ' in line:
-                    cpus_per_task=line.split()[1][:-2]
+                    cpus_per_task=line.split()[1][:-1]
                     
         #Profilmerkmale Number of processes, threads and nodes, cpus_per_task      
-        values[1][len(values[1])-1][2]='proc {}; thre {}\nN:{}, c:{} ({})'.format(stringlist[4].split('=')[1][:-1],stringlist[5].split('=')[1][:-1],nodes,cpus_per_task,name[name.rfind('/')+6:-4])                        
+        values[1][len(values[1])-1][2]='proc {}; thread {}\nnodes: {}, cpus: {}\n ({})'.format(stringlist[4].split('=')[1][:-1],stringlist[5].split('=')[1][:-1],nodes,cpus_per_task,name[name.rfind('/')+6:-4])                        
            
         #Results
         val=float(stringlist[118].split('=')[1])
