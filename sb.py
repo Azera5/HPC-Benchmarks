@@ -528,7 +528,7 @@ def error_log(txt, local_table={}, exc_info=''):
     local_varname, local_varvalue, local_varnumber, local_scale = [], [], [], []
        
     if txt!='':
-        txt = 'further information: '+txt
+        txt = 'further information:\n'+txt
     if dbg==True:
         if len(local_table)>0:
             i = 0
@@ -627,10 +627,10 @@ def shell(cmd):
         #Ausgabe soll nicht direkt auf's Terminal
         p = subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
         if(p.returncode!=0 and dbg==True):
-            error_log('\ncommand: >>'+cmd+'<< resulted in an non zero return')
+            error_log('command: >>'+cmd+'<< resulted in an non zero return')
         return p.stdout.decode('UTF-8')
     except Exception as exc:
-        error_log('\ncommand: >>'+cmd+'<<', locals(), traceback.format_exc())
+        error_log('command: >>'+cmd+'<<', locals(), traceback.format_exc())
     
 
 #Wertet einen Python-Ausdruck aus
@@ -659,7 +659,7 @@ def code_eval(expr):
 
     except Exception as exc:
         sys.stdout = primary_stdout
-        error_log('\ncommand: >>'+expr+'<< ', locals(), traceback.format_exc())
+        error_log('command: >>'+expr+'<< ', locals(), traceback.format_exc())
         return '\n'+FCOL[15]+'{}\n'.format('---'*linesize)+FORM[0]+'{} - eval() output - \n'.format('   '*int(linesize*0.45))+FEND+'\n'+FCOL[9]+traceback.format_exc()+FEND+FCOL[15]+'{}\n'.format('---'*linesize)+FEND
 
 #Liefert für eine Configzeile "123.4.5   [Parameter x]" nur die Zahl
@@ -820,7 +820,7 @@ def get_target_path(spec):
     if r!='':
         return r+'/bin'
     else:
-        error_log('\na path for >>'+spec[:spec.find('^')]+'<< couldn\'t be found!', locals())
+        error_log('a path for >>'+spec[:spec.find('^')]+'<< couldn\'t be found!', locals())
         return 'no path found!'
 
 #Überschreibt die Zeilen von s_line (int) bis inkl. e_line (int) von file1 nach (ggf. mit Offset) file2
@@ -904,17 +904,17 @@ def write_slurm_params(profile, type):
     return txt
 
 def find_binary(profile, bench_id):  
-    if check_expr_syn(profile[0][3]):
+    if check_expr_syn(profile[0][3],profile[0][0]):
         bin_path = shell(SPACK_XPTH+' find --paths '+profile[0][3])
         #Die Benchmarks sollten vom home-Verzeichnis aus erreichbar sein... <-- TODO: klären ob das den Anforderungen entspricht
         _ = bin_path.find('/home')
         if _ == -1:
-            error_log('\npackage {} seems to be unavailable! profile: '.format(profile[0][3])+profile[0][0], locals())
+            error_log('package {} seems to be unavailable! profile: '.format(profile[0][3])+profile[0][0], locals())
         else:
             bin_path = ((bin_path[_:]).strip()+'/bin/')
         return bin_path
     else:
-        error_log('\ninvalid syntax detected in '+profile[0][0]+', resulting spec: {} '.format(profile[0][3]), locals())
+        error_log('invalid syntax detected in '+profile[0][0]+', resulting spec: {} '.format(profile[0][3]), locals())
         return bin_path
 
 def delete_dir(pth):
@@ -1101,7 +1101,7 @@ def avail_pkg(id):
             pkg_info[id][0] = FCOL[9]+'?/? (command not available!)'+FEND
             pkg_info[id][1] = FCOL[9]+'?'+FEND
             pkg_info[id][2] = FCOL[9]+'?'+FEND
-            error_log('\ninformation regarding package-availability is unavailable!\n used spack-binary: {}'.format(SPACK_XPTH), locals())
+            error_log('information regarding package-availability is unavailable!\n used spack-binary: {}'.format(SPACK_XPTH), locals())
         else:
             if str(res[0:14])=='==> No package':
                 avl-=1
@@ -1413,10 +1413,10 @@ def view_installed_specs(name=0):
             return shell('{} find --show-full-compiler '.format(SPACK_XPTH)+name)  
     
     except Exception as exc:
-        error_log('\nspec:'+str(name), locals(), traceback.format_exc())
+        error_log('spec:'+str(name), locals(), traceback.format_exc())
 
 #Prüft Specausdruck auf grobe Syntaxfehler
-def check_expr_syn(expr):
+def check_expr_syn(expr, name):
     global menutxt
     expr_list=['@%','%@','^%','%^','^@','@^']
     """
@@ -1429,13 +1429,12 @@ def check_expr_syn(expr):
     """
     if re.search(r'@{1,1}(\w*\.*[%]{0,0}\w*)*@{1,}',expr):
         return False
+    
     for _ in expr_list:
         r=expr.find(_)        
-        if r != -1:
-            #FARBEN AUS LOG.TXT ENTFERNEN + LIEBER ZEILE DRUNTER MAKIEREN!!!
-            problem='syntax error: {}{}{}'.format(expr[:r-1],FCOL[8]+expr[r]+FEND,expr[r+1:])
-            menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+FEND+' was deselected! (syntax error)'+'\n'+FCOL[6]+problem+FEND
-            error_log(problem,locals())
+        if r != -1:           
+            menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error)\n{}{}\n'.format(expr,FCOL[8])+('^').rjust(r+1)+FEND+'\n'
+            error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(r+21+len(name)),locals())
             return False
     return True
 
@@ -1772,7 +1771,7 @@ def file_r(name, pos):
             stringlist = f.readlines()
             return stringlist[int(pos)]
     except Exception as exc:
-        error_log('\ntarget file for reading-operation: '+name+'\nline: '+str(pos), locals(), traceback.format_exc())        
+        error_log('target file for reading-operation: '+name+'\nline: '+str(pos), locals(), traceback.format_exc())        
 
 def count_line(name):
      with open (name, 'r') as f:
@@ -1800,7 +1799,7 @@ def file_w(name, txt, pos):
                 f.write(txt+'\n')
     except Exception as exc:
         #print(FCOL[9]+traceback.format_exc()+FEND)
-        error_log('\ntarget file for writing-operation: '+name+'\nline: '+str(pos)+'\ntext: '+str(txt), locals(), traceback.format_exc())
+        error_log('target file for writing-operation: '+name+'\nline: '+str(pos)+'\ntext: '+str(txt), locals(), traceback.format_exc())
 
 def get_mem_digit(pos):
     r = str(file_r('{}/mem.txt'.format(LOC), pos))
