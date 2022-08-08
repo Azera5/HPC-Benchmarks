@@ -7,11 +7,11 @@ from sb import shell, check_expr_syn, error_log
 
 
 meta=sys.argv[1].split('#')
-expr=sys.argv[2].split('#')
-err=''
+expr=[_.split('$') for _ in sys.argv[2].split('#')]
+menutxt=''
 
 #plot.py Path
-loc=str(os.path.dirname(os.path.abspath(__file__)))
+LOC=str(os.path.dirname(os.path.abspath(__file__)))
 
 #Shellfunktion aus sb.py (Hauptprogramm)
 """
@@ -40,7 +40,7 @@ def check_expr_syn(expr):
     for _ in expr_list:
         r=expr.find(_)        
         if r != -1:
-            sb.error_log('echo Syntaxfehler an Position: {} >> {}/install.err'.format(str(r),loc),locals())
+            sb.error_log('echo Syntaxfehler an Position: {} >> {}/install.err'.format(str(r),LOC),locals())
             sb.err
             return False
     return True
@@ -59,33 +59,36 @@ def check_spec(name,version=-1):
 
 
 #Prüft ob Installationsausdruck gültig ist (alle Specs)
-def check_expr(expr):
-    if check_expr_syn(expr)==True:
-        arr = expr.split('^')        
+def check_expr(expr,name):
+    global menutxt
+    if check_expr_syn(expr,name)==True:
+        arr = expr.split('^')       
+        
         for spec in arr:
-            s=spec.split('%')            
-            
+            s=spec.split('%')           
             #Untersuchung von einzelnem Package und Version
             for _ in s:            
                 if _[0][:0]=='@':
-                    #print('Name fehlt!')
-                    #Package Name fehlt
+                    menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! \n<spec error> at {}: packagename is missing\n'.format(name)
+                    error_log('<spec error> at {}: packagename is missing\n'.format(name),locals())
                     return False               
                 
                 _=_.split('@')                
                 if len(_) > 1:
-                    if not check_spec(_[0],_[1]):                   
-                        error_log(_[0]+'@'+_[1]+' existiert nicht',locals())
+                    if not check_spec(_[0],_[1]):
                         #Version existiert nicht
+                        menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! \n<spec error> at {}: version {} does not exist\n'.format(name,_[0]+'@'+_[1])
+                        error_log('<spec error> at {}: version {} does not exist\n'.format(name,_[0]+'@'+_[1]),locals())                        
                         return False
                 else:
                     if not check_spec(_[0]):
                         #Package existiert nicht
-                        error_log(_[0]+' existiert nicht',locals())
+                        menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! \n<spec error> at {}: package {} does not exist\n'.format(name,_[0])
+                        error_log('<spec error> at {}: package {} does not exist\n'.format(name,_[0]),locals())
                         return False
        
         return True
-    #Syntaxfehler im Ausdruck
+    #Syntaxfehler im Ausdruck     
     return False
 
               
@@ -98,7 +101,7 @@ def install_spec(expr):
     #Check ob angegebene Partition existiert
     if shell('sinfo -h -p '+partition).find(partition)==-1:        
         error_log('Partition: {} existiert nicht'.format(str(partition)),locals())
-        #os.system('echo Partition: {} existiert nicht >> {}/install.err'.format(str(partition),loc),locals())
+        #os.system('echo Partition: {} existiert nicht >> {}/install.err'.format(str(partition),LOC),locals())
         return 
         
     slurm=''
@@ -110,28 +113,35 @@ def install_spec(expr):
     +'#SBATCH --ntasks='+task+'\n' \
     +'#SBATCH --cpus-per-task='+cpus+'\n' \
     +'#SBATCH --partition='+partition+'\n' \
-    +'#SBATCH --output={}/install.out\n'.format(loc) \
-    +'#SBATCH --error={}/install.err\n\n'.format(loc) \
+    +'#SBATCH --output={}/install.out\n'.format(LOC) \
+    +'#SBATCH --error={}/install.err\n\n'.format(LOC) \
     +'source {}/share/spack/setup-env.sh\n'.format(meta[4])
     
     for e in expr:
-        #Prüft ob breits identische spec installiert werden soll
-        if specs.find(e)==-1:            
+        #Prüft ob identische spec installiert werden soll
+        if specs.find(e[0])==-1:            
             #Prüft ob jeweils die einzelnen Komponenten der spec existieren
-            if check_expr(e)==True:                   
-                specs=specs+'srun spack install '+e+'\n'        
-        
-        #Dokumentieren des Fehlers
-        else:
-            #os.system('echo {} existiert nicht >> {}/install.err'.format(str(e),loc))
-            error_log('{} does not exist'.format(str(e),loc),locals())
-    
+            if check_expr(e[0],e[1])==True:                   
+                specs=specs+'srun spack install '+e[0]+'\n'
+    """            
     if len(specs)==0:
+        menutxt+='\n'
         error_log('everything already installed',locals())
-        #return os.system('echo bereits alles installiert >> {}/install.err'.format(str(e),loc))                
-    else:        
-        return str(slurm+specs)
+        #return os.system('echo bereits alles installiert >> {}/install.err'.format(str(e),LOC))                
+    """          
+    return str(slurm+specs)
 
-#Write install.sh
-with open('{}/install.sh'.format(loc),'w') as f:
-    f.write(install_spec(expr))
+def main():
+    #Write install.sh
+    with open('{}/install.sh'.format(LOC),'w') as f:
+        f.write(install_spec(expr))
+    print(menutxt)
+    sys.exit(menutxt)
+    
+if __name__ == "__main__":
+    main()
+
+
+
+    
+    

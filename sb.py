@@ -806,7 +806,7 @@ def get_all_specs(bench,cfgs='all'):
     expr=[]  
     for s in cfg_profiles[tag_id_switcher(bench)]:        
         if cfgs=='all' or s[0][0] in cfgs:
-            expr.append(s[0][3])    
+            expr.append([s[0][3],s[0][0]])    
     return expr
 
 def config_out(bench_id):
@@ -1503,29 +1503,36 @@ def check_expr_syn(expr, name):
     (...) Gruppe -> praktisch eine Zeichenkette
     \. Punktsymbol, da einfach nur . für einzelnes Zeichen steht            
     """
-    if re.search(r'@{1,1}(\w*\.*[%]{0,0}\w*)*@{1,}',expr):
+    #Nicht abgedeckt @...
+    syn_err=re.search(r'@{1,1}(\w*\.*[%]{0,0}\w*)*@{1,}',expr)
+    if syn_err:
+        menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error: {})\n{}{}\n'.format(syn_err[0],expr,FCOL[8])+('^').rjust(syn_err.span()[0]+1)+('^').rjust(len(syn_err[0])-1)+FEND
+        error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(syn_err.span()[0]+21+len(name))+('^').rjust(len(syn_err[0])-1),locals())
         return False
     
     for _ in expr_list:
-        r=expr.find(_)        
-        if r != -1:           
-            menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error)\n{}{}\n'.format(expr,FCOL[8])+('^').rjust(r+1)+FEND+'\n'
-            error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(r+21+len(name)),locals())
+        pos=expr.find(_)        
+        if pos != -1:           
+            menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error)\n{}{}\n'.format(expr,FCOL[8])+('^').rjust(pos+1)+FEND+'\n'
+            error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(pos+21+len(name)),locals())
             return False
     return True
 
 #Schreibt Script zum installieren der specs 
 #Übergibt alle benötigen Argumente an Install.py
 def install_spec(expr):  
+    global menutxt
     #Slurmparameter 
     meta=cfg_profiles[0][0][2][0]+'#'+cfg_profiles[0][0][2][1]+'#'+cfg_profiles[0][0][2][2]+'#'+cfg_profiles[0][0][2][3]+'#'+SPACK_XPTH[:-9]
     expr_=''    
     #String aller Specs
     for e in expr:
-        expr_+=e+'#'            
+        expr_+=e[0]+'\$'+e[1]+'#'
     
     #Printen der Job ID klappt noch nicht
-    return shell('source {}/share/spack/setup-env.sh ; python3 {}/install.py {} {} ; chmod +x {}/install.sh ; sbatch {}/install.sh'.format(SPACK_XPTH[:-9], LOC,meta,expr_[:len(expr_)-1],LOC,LOC))
+    menutxt+=shell('source {}/share/spack/setup-env.sh ; python3 {}/install.py {} {}'.format(SPACK_XPTH[:-9], LOC,meta,expr_[:len(expr_)-1]))
+    print(menutxt)
+    return shell('chmod +x {}/install.sh ; sbatch {}/install.sh'.format(LOC,LOC))
         
 
 
