@@ -452,12 +452,17 @@ def get_cfg(bench,farg='all'):
 get_cfg.time=0
 
 def save_times():
+    global menutxt
     c = count_line('{}/mem.txt'.format(LOC))
     file_w('{}/mem.txt'.format(LOC),'evaluate_paths[{}]'.format(str(evaluate_paths.time)),c-6)
     file_w('{}/mem.txt'.format(LOC),'prepare_array[{}]'.format(str(prepare_array.time)),c-5)
     file_w('{}/mem.txt'.format(LOC),'check_data[{}]'.format(str(check_data.time)),c-4)
     file_w('{}/mem.txt'.format(LOC),'check_dirs[{}]'.format(str(check_dirs.time)),c-3)
-    file_w('{}/mem.txt'.format(LOC),'get_cfg[{}]'.format(str(get_cfg.time)),c-2) 
+    file_w('{}/mem.txt'.format(LOC),'get_cfg[{}]'.format(str(get_cfg.time)),c-2)
+
+    if dbg:
+        data = [[str(evaluate_paths.time),'evaluate_paths'],[str(prepare_array.time),'prepare_array'],[str(check_data.time),'check_data'],[str(check_dirs.time),'check_dirs']]
+        menutxt+=draw_table(data, t_width, 0, 0.5, title='Boot Up Stats')
 
 #Sucht Matplotlib (installiert falls nicht Vorhanden)
 def find_matplot_python_hash():
@@ -1112,7 +1117,7 @@ def draw_table(array, size = t_width, offset = 0, factor = 0.8, title='Highlight
     for i in lrange:       
         if i==0:
             #Kopfzeile mit Überschrift
-            tbl+=ml+'\t'*offset+COLH+FORM[0]+'{:^{pos}}'.format('---'+title[-linesize+3:linesize-3]+'---', pos=linesize)+FEND+'\n'
+            tbl+='\t'*offset+COLH+FORM[0]+'{:^{pos}}'.format('---'+title[-linesize+3:linesize-3]+'---', pos=linesize)+FEND+'\n'
         newl = ''
         #Abarbeitung der Elemente in einer Zeile
         for j in crange:
@@ -1122,7 +1127,7 @@ def draw_table(array, size = t_width, offset = 0, factor = 0.8, title='Highlight
             else:
                 newl+='{:<{pos}}'.format(COL1+FCOL[1]+(array[i][j]+' '*(entry_width-len(array[i][j])))[:entry_width], pos=entry_width)
         newl+=' '*rest+FEND
-        tbl+=ml+'\t'*offset+'{txt:<{pos}}'.format(txt=newl, pos=linesize)+'\n'      
+        tbl+='\t'*offset+'{txt:<{pos}}'.format(txt=newl, pos=linesize)+'\n'      
         
     return tbl
 
@@ -1610,9 +1615,9 @@ def menu():
         elif opt == str(len(BENCH_ID_LIST)+2):
             elist = ''
             if len(error_stack)==0:
-                elist =ml+FCOL[4]+'no errors detected! \n'+FEND
+                elist =FCOL[4]+'no errors detected! \n'+FEND
             else:
-                elist =ml+FCOL[9]+'recent errors... \n'+FEND
+                elist =FCOL[9]+'recent errors... \n'+FEND
             while len(error_stack)!=0:
                 elist += '\n' + error_stack.pop()
             print_menu(elist)
