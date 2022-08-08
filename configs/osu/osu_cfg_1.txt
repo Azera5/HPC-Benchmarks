@@ -1,4 +1,7 @@
-----------Grundlagentechnologie----------
+--------------------meta settings--------------------
+3					[iterations]
+avg					[aggregation: e.g. avg, max]
+------------------base dependencies------------------
 5.9						[OSU Version]
 gcc						[Compiler]
 12.1.0						[Compiler Version]
@@ -6,16 +9,16 @@ openmpi						[MPI Implementierung]
 4.1.3						[MPI Version]
 gcc						[MPI Compiler]
 12.1.0						[MPI Version]
------------------osu-Flags----------------
--------- Zum Anwenden # entfernen --------
------------------osu-Flags----------------
+-----------------benchmark parameter-----------------
+-------- missing # <=> utilization of param. --------
+-----------------benchmark parameter-----------------
 #1:1048576					[Nachrichtenläge in bytes: min:max]		-m
 #536870912					[Max Speicherverbrauch per Prozess]		-M
 #1000						[Max Iterationen per Nachricht] 		-i
 #200 						[Aufwärmiterationen]				-x
 #1:2						[osu_latency_mt: Threadzahl sender:receiver] 	-t
 #1:2						[osu_latency_mp: Prozesszahl sender:receiver] 	-t 
-------------------SLURM------------------
+-------------------SLURM parameter-------------------
 vl-parcio					[Partition]
 2						[Nodes]
 1						[Prozesse]

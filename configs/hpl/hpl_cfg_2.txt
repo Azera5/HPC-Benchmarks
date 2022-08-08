@@ -1,16 +1,19 @@
-----------Grundlagentechnologie----------
+--------------------meta settings--------------------
+3					[iterations]
+avg					[aggregation: e.g. avg, max]
+------------------base dependencies------------------
 2.3							[HPL Version]
 gcc							[Compiler]
-12.1.0						[Compiler Version]
+8.5.0						[Compiler Version]
 openmpi						[MPI Implementierung]
 4.1.3						[MPI Version]
 gcc							[MPI Compiler]
-12.1.0						[MPI Version]
+8.5.0						[MPI Version]
 openblas					[BLAS Implementierung]
 0.3.20						[BLAS Version]
 gcc							[BLAS Compiler]
-12.1.0						[BLAS Version]
------------------HPL.dat-----------------
+8.5.0						[BLAS Version]
+-----------------benchmark parameter-----------------
 HPL.out      				[ungenutzt]
 6            				[ungenutzt]
 1            				[#Matrizen]
@@ -40,7 +43,7 @@ HPL.out      				[ungenutzt]
 0            				[ungenutzt]
 1            				[ungenutzt]
 8            				[ungenutzt]
-------------------SLURM------------------
+-------------------SLURM parameter-------------------
 vl-parcio					[Partition]
 3							[Nodes]
 15							[Prozesse]

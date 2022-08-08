@@ -168,7 +168,7 @@ def run_plot(timestemp,bench):
 
     ax_scale()
     
-    plt.savefig(path+'/'+bench+'_plot.png')
+    plt.savefig(path+'/'+'plot.png')
 
 
 #Skalieren der Achsen   
