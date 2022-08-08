@@ -234,8 +234,14 @@ def cl_arg():
                 get_cfg(args.install[0],args.install[1])               
                 expr=get_all_specs(args.install[0],names)
             
-        #TODO: Fix print (Ladebalken verschwinden)        
-        print(install_spec(expr))
+        
+        
+        script_pth=install_spec(expr)
+        
+        if menutxt !='':
+            print(menutxt)
+        
+        print(script_pth)
     
     #Run Benchmarks
     if args.run:
@@ -950,7 +956,7 @@ def write_slurm_params(profile, type):
     return txt
 
 def find_binary(profile, bench_id):  
-    if check_expr_syn(profile[0][3],profile[0][0]):
+    if check_expr_syn(profile[0][3],profile[0][0]) == 'True':
         bin_path = shell(SPACK_XPTH+' find --paths '+profile[0][3])
         #Die Benchmarks sollten vom home-Verzeichnis aus erreichbar sein... <-- TODO: klären ob das den Anforderungen entspricht
         _ = bin_path.find('/home')
@@ -1186,10 +1192,8 @@ def check_path(pth):
 
 
         
-"""
-Skriptbau-Funktionen
-"""
 
+#Skriptbau-Funktionen
 #Default Argument <=> wir wollen alle Profile laufen lassen
 def bench_run(bench_id, farg = 'all', extra_args = ''):   
 
@@ -1476,10 +1480,8 @@ def build_plot(t_id, bench,run_dir):
 
 
 
-"""
-Installation
-"""
 
+#Installation
 def view_installed_specs(name=0):
     try:
         if name==0:
@@ -1506,17 +1508,20 @@ def check_expr_syn(expr, name):
     #Nicht abgedeckt @...
     syn_err=re.search(r'@{1,1}(\w*\.*[%]{0,0}\w*)*@{1,}',expr)
     if syn_err:
-        menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error: {})\n{}{}\n'.format(syn_err[0],expr,FCOL[8])+('^').rjust(syn_err.span()[0]+1)+('^').rjust(len(syn_err[0])-1)+FEND
-        error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(syn_err.span()[0]+21+len(name))+('^').rjust(len(syn_err[0])-1),locals())
-        return False
+        message= '\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error: {})\n{}{}\n'.format(syn_err[0],expr,FCOL[8])+('^').rjust(syn_err.span()[0]+1)+('^').rjust(len(syn_err[0])-1)+FEND
+        menutxt+=message
+        error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(syn_err.span()[0]+21+len(name))+('^').rjust(len(syn_err[0])-1),locals())        
+        return message
     
     for _ in expr_list:
         pos=expr.find(_)        
         if pos != -1:           
-            menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error)\n{}{}\n'.format(expr,FCOL[8])+('^').rjust(pos+1)+FEND+'\n'
-            error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(pos+21+len(name)),locals())
-            return False
-    return True
+            message='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error)\n{}{}\n'.format(expr,FCOL[8])+('^').rjust(pos+1)+FEND+'\n'
+            menutxt+=message
+            return message
+            error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(pos+21+len(name)),locals())           
+            return menutxt
+    return 'True'
 
 #Schreibt Script zum installieren der specs 
 #Übergibt alle benötigen Argumente an Install.py
@@ -1530,9 +1535,19 @@ def install_spec(expr):
         expr_+=e[0]+'\$'+e[1]+'#'
     
     #Printen der Job ID klappt noch nicht
-    menutxt+=shell('source {}/share/spack/setup-env.sh ; python3 {}/install.py {} {}'.format(SPACK_XPTH[:-9], LOC,meta,expr_[:len(expr_)-1]))
-    print(menutxt)
-    return shell('chmod +x {}/install.sh ; sbatch {}/install.sh'.format(LOC,LOC))
+    cmd='source {}/share/spack/setup-env.sh ; python3 {}/install.py {} {}'.format(SPACK_XPTH[:-9], LOC,meta,expr_[:len(expr_)-1])
+    p=subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+    menutxt+=p.stdout.decode()       
+    
+    #run script    
+    if os.path.isfile('{}/install.sh'.format(LOC))==True:
+        return shell('chmod +x {}/install.sh ; sbatch {}/install.sh'.format(LOC,LOC))
+        
+    #Return script path or some informations
+    else:
+        menutxt+=FCOL[6]+'    There is nothing to install'+FEND+'\n'
+        menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
+        return ''
         
 
 
