@@ -1340,6 +1340,8 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     tag = tag_id_switcher(bench_id)
     
     t_id = time.strftime('%H%M%S_%d%m%Y', time.localtime())
+    
+    #such files won't be persistent! (there's a clean up routine for them)
     if test_only:
         t_id+='[dummy]'
     
@@ -1423,11 +1425,26 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
     #we read from the profiles how often a bench has to run 
     #[Finale]
     if num==0:
+        num_workaround=''
         num=''
     else:
+        #please be aware that >>num=str(num)+'#'<< would result in a comment
+        #so we have to use this small work around
+        num_workaround=str(num)+'\\#'
         num=str(num)+'#'
+        
+        
     
     jobtxt=''
+    
+    if profile[0][0].find('_cfg_')==-1:
+        menutxt+=FCOL[6]+'<warning> '+FEND+'>>{}<<'.format(profile[0][0])+' doesn\'t match the expected config-name pattern: <tag>_cfg_<name>.txt'+'\n'
+        error_log('>>{}<<'.format(profile[0][0])+' doesn\'t match the expected config-name pattern: <tag>_cfg_<name>.txt')
+    
+    
+    #<tag>_cfg_<name>.txt --> <tag>_cfg_<name> (shortened) & <name> (shortest)
+    shortened_name = profile[0][0][:-4]
+    shortest_name = profile[0][0][profile[0][0].find('_cfg_')+5:-4]
     
     #Manche Dinge werden direkt ermittelt...
     if bench_id != OSU_ID:
@@ -1438,16 +1455,16 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
     if len(profile[5])==0:
         jobtxt=write_slurm_params(profile, 'jobskript',4)
         #Jobname (<=> Profilname)
-        jobtxt+='#SBATCH --job-name={}\n'.format(profile[0][0][:-4])
+        jobtxt+='#SBATCH --job-name={}\n'.format(num_workaround+shortened_name)
         #Ziel für Output (sollte in (...)[results] landen)
         if profile[4][10]=='' and bench_id != HPCG_ID:
-            jobtxt+='#SBATCH --output={}\n'.format(res_dir+'/'+num+profile[0][0][:-4]+'.out')
+            jobtxt+='#SBATCH --output={}\n'.format(res_dir+num_workaround+shortened_name+'/'+num_workaround+shortened_name+'.out')
         #Output wird für hpcg manuell in execute_line() gehandelt
         if bench_id == HPCG_ID:
             jobtxt+='#SBATCH --output=/dev/null\n'
         #Ziel für Fehler (sollte in (...)[results] landen)
         if profile[4][11]=='':
-            jobtxt+='#SBATCH --error={}\n'.format(res_dir+'/'+num+profile[0][0][:-4]+'.err')
+            jobtxt+='#SBATCH --error={}\n'.format(res_dir+num_workaround+shortened_name+'/'+num_workaround+shortened_name+'.err')
         jobtxt+='\n'
         #Sourcen von spack   
         jobtxt+='source {}/share/spack/setup-env.sh\n'.format(SPACK_XPTH[:-9])
@@ -1455,7 +1472,7 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
         jobtxt+= 'spack load {}\n'.format(profile[0][3])   
         jobtxt+='\n'
         #Skriptzeile in der eine Binary ausgeführt wird
-        jobtxt+=execute_line(bench_id, bin_path, profile[4][1], profile[4][2], extra_args, res_dir+profile[0][0][:-4]+'.out',res_dir)
+        jobtxt+=execute_line(bench_id, bin_path, profile[4][1], profile[4][2], extra_args, res_dir+num_workaround+shortened_name+'/'+num_workaround+shortest_name+'.out', res_dir+num_workaround+shortest_name)
         #TODO: Entladen von Modulen, nötig? Das ist ja ein abgeschlossenes Jobscript...
         #jobtxt+= 'spack unload {}\n'.format(profile[0][3])
     else:
@@ -1464,11 +1481,11 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
     if os.path.isdir(run_dir[:-1])==True:
-        file_w(run_dir+'{}{}.sh'.format(num, profile[0][0][:-4]),jobtxt,'a')
-        shell('chmod +x '+run_dir+'{}{}.sh'.format(num, profile[0][0][:-4])) 
-    return run_dir+'{}{}.sh'.format(num, profile[0][0][:-4])
+        file_w(run_dir+'{}.sh'.format(num+shortened_name),jobtxt,'a')
+        shell('chmod +x '+run_dir+'{}.sh'.format(num+shortened_name)) 
+    return run_dir+'{}.sh'.format(num_workaround+shortened_name)
 
-def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output,res_dir):
+def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output, res_dir):
 
     """ 
     >>>>>   script building pipeline (4/5)           <<<<
