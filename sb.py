@@ -29,6 +29,7 @@ HPCG_ID = 3
 
 #we also want to have something iterable corresponding to our supported benchmarks
 BENCH_ID_LIST = [MISC_ID, HPL_ID, OSU_ID, HPCG_ID]
+BENCHS_WITHOUT_EXTRA_ARGS =[HPL_ID,HPCG_ID]
 
 #format: tag, offset in local config files, offset in package config files (like HPL.dat)  
 TRANSFER_PARAMS = [['hpl', 16, 2, 'HPL.dat'], ['hpcg', 12, 2, 'hpcg.dat']]
@@ -88,6 +89,7 @@ auto_space_normalization=True
 termination_logging=True
 path_logging=True
 info_feed=True
+test_only=False
 
 
 #Schriftfarb-Konstanten
@@ -160,8 +162,7 @@ test_list2 = [['aaaaaa'],['bbbbbb'],['ccccccc'],['dddddddd']]
 Command-Line-Parameter
 """
 def cl_arg():
-    global cfg_profiles, menu_ctrl
-    benchs_without_exarg =[HPL_ID,HPCG_ID]
+    global cfg_profiles, menu_ctrl, test_only
     
     parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument('-i','--install',nargs='+',type=str,help=''+
@@ -183,15 +184,34 @@ def cl_arg():
     FCOL[2]+'     e.g.: -r hpcg 1,3-4,Test1\n'+
     '           -r hpcg all <=> -r hpcg\n\n'+FEND)
     
+    parser.add_argument('-w','--write',nargs='+',type=str,help=''+
+    FCOL[15]+'works very similar to -r/--run\n'+FEND+
+    FCOL[7]+'key difference: '+FEND+'there\'s no final script submission!\n'+
+    FCOL[2]+'     e.g.: -w hpl 1,3-4,Test1\n'+
+    '           etc.\n\n'+FEND)
+    
+    parser.add_argument('-t','--test',nargs='+',type=str,help=''+
+    FCOL[15]+'works very similar to -r/--run\n'+FEND+ 
+    FCOL[7]+'key difference: '+FEND+'creates *non-persistent* dummy projects and prints the error stack!\n'+
+    FCOL[2]+'     e.g.: -t hpl 1,3-4,Test1\n'+
+    '           etc.\n\n'+FEND+
+    FCOL[15]+'<info>'+FEND+' clean up is >>rm -r ...<<-based respective to sub-directories named like >>*@*[dummy]<<,\n'+
+    'please be cautious with naming data in the project directory this way\n\n')
+    
+    parser.add_argument('-p','--profiles',nargs=1,type=str,help=''+
+    FCOL[15]+'debugging command: shows how a specific profile set is loaded\n'+FEND+  
+    FCOL[2]+'     e.g.: -p hpl\n'+FEND)
+    
     parser.add_argument('-c','--clean',nargs=1,type=str,help=''+
-    FCOL[15]+'removes some files\n'+FEND+  
+    FCOL[15]+'helps to handle data clutter\n'+FEND+  
     '  '+FCOL[7]+'projects:'+FEND+' removes projects folder\n'+
     '  '+FCOL[7]+'install:'+FEND+'  removes all install scripts\n'+
     '  '+FCOL[7]+'log:'+FEND+' cleans log.txt (error-log file)\n' +
     '  '+FCOL[7]+'mem:'+FEND+' resets mem.txt (run time variables)\n'+
     '  '+FCOL[7]+'all:'+FEND+' cleans projects folder, install scripts and log.txt,'+FCOL[13]+' not mem.txt!\n'+FEND+     
     '     '+FCOL[2]+'e.g.: -c projects\n'+
-    '           -c all\n'+FEND)
+    '           -c all\n'+FEND+
+    FCOL[15]+'<info>'+FEND+' please consider saving relevant project results beforehand\n')
     
     evaluate_paths()
     args= parser.parse_args()
@@ -201,12 +221,12 @@ def cl_arg():
         return print(clean(args.clean[0]))
     
     calc_terminal_size()
+    clean_dummy_projects()
     prepare_array()
     check_data()
     check_dirs()
-    
     get_cfg(tag_id_switcher(MISC_ID))
-   
+    
 
     
     #Install Benchmarks
@@ -243,37 +263,36 @@ def cl_arg():
         
         print(script_pth)
     
-    #Run Benchmarks
+    #this mode writes the scripts *and* submitts them directly to SLURM
     if args.run:
-        pth=''
-        args_len=len(args.run)        
-        
-        #run benchmarks without extra arguments
-        if tag_id_switcher(args.run[0]) in benchs_without_exarg: 
-            if args_len < 2 or args.run[1]=='all':
-                get_cfg(args.run[0])
-                pth=bench_run(tag_id_switcher(args.run[0]),'all')                
-            else:
-                get_cfg(args.run[0],args.run[1])               
-                pth=bench_run(tag_id_switcher(args.run[0]),args.run[1])                
-       
-        #run benchmarks with extra arguments
-        else:
-            if args.run[0]=='osu':
-                if args_len < 3 or args.run[2]=='all':
-                    get_cfg(args.run[0])                    
-                    pth=bench_run(tag_id_switcher(args.run[0]),'all',args.run[1])                                       
-                else:
-                    get_cfg(args.run[0],args.run[2])
-                    pth=bench_run(tag_id_switcher(args.run[0]),args.run[2],args.run[1])
-        
+        pth=comline_run_helper(args.run)
+        #possible warnings etc.
         print(menutxt)
-        if pth!='':
+        #we're submitting our scripts
+        if pth!='-1':
             print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
-        
+
+    #this mode *only* writes the scripts
+    if args.write:
+        pth=comline_run_helper(args.write)      
+        #possible warnings etc.
+        print(menutxt)
+    
+    #this mode simulates script writing for an error-analysis
+    if args.test:
+        test_only=True
+        pth=comline_run_helper(args.test)
+        #possible warnings etc.
+        print(show_err_stack())
+        clean_dummy_projects()
+    
+    #this mode *only* loads profiles and prints them afterwards
+    if args.profiles:
+        config_out(args.profiles[0])
         
     #Start via Menu   
-    if not args.install and not args.run and not args.clean:
+    if not args.install and not args.test and not args.profiles and not args.write and not args.run and not args.clean:
+        clear()
         for id in BENCH_ID_LIST:
             if id==MISC_ID:
                 continue
@@ -409,11 +428,12 @@ check_dirs.time=0
 def get_cfg(bench,farg='all'):
     timestart = time.time()
     global cfg_profiles
-    print('\nloading {}'.format(bench))
     
     sublist, spec_ = [], []
     id = tag_id_switcher(bench)
     
+    if id != MISC_ID:
+        print('\nloading {}'.format(bench))
     if farg=='all':
         names = get_cfg_names(get_cfg_path(bench), bench)
     else:
@@ -452,7 +472,8 @@ def get_cfg(bench,farg='all'):
         cfg_profiles[id][names.index(p)][block]=sublist
         sublist, spec_, spec = [], [], '' 
         #Kleine Illustration des Ladestandes
-        progressbar(names.index(p)+1, len(names))        
+        if id != MISC_ID:
+            progressbar(names.index(p)+1, len(names))        
         txtfile.close()
     get_cfg.time+=time.time()-timestart    
 get_cfg.time=0
@@ -467,7 +488,8 @@ def save_times():
     file_w('{}/mem.txt'.format(LOC),'get_cfg[{}]'.format(str(get_cfg.time)),c-2)
 
     if dbg:
-        data = [[str(evaluate_paths.time),'evaluate_paths'],[str(prepare_array.time),'prepare_array'],[str(check_data.time),'check_data'],[str(check_dirs.time),'check_dirs']]
+        data = [[str('{:08.6f}'.format(evaluate_paths.time))+'s','evaluate_paths'],[str('{:08.6f}'.format(prepare_array.time))+'s','prepare_array'],[str('{:08.6f}'.format(check_data.time))+'s','check_data'],[str('{:08.6f}'.format(check_dirs.time))+'s','check_dirs'], [str('{:08.6f}'.format(get_cfg.time))+'s','get_cfg']]
+        #data = [[str(evaluate_paths.time)+'s','evaluate_paths'],[str(prepare_array.time)+'s','prepare_array'],[str(check_data.time)+'s','check_data'],[str(check_dirs.time)+'s','check_dirs'], [str(get_cfg.time)+'s','get_cfg']]
         menutxt+=draw_table(data, t_width, 0, 0.5, title='Boot Up Stats')
 
 #Sucht Matplotlib (installiert falls nicht Vorhanden)
@@ -499,7 +521,28 @@ def find_matplot_python_hash():
     pth=pth[pth.find('python'):].replace('-','',1)
     pth=pth[pth.find('-')+1:pth.find('/')]
     return '/'+pth
-  
+
+def comline_run_helper(comline_args):
+    #base case: benchmarks without extra arguments
+    if tag_id_switcher(comline_args[0]) in BENCHS_WITHOUT_EXTRA_ARGS: 
+        #e.g. >>python3 sb.py -r hpl<< <=> we want to run all profiles for hpl
+        if len(comline_args) < 2 or comline_args[1]=='all':
+            get_cfg(comline_args[0])
+            return bench_run(tag_id_switcher(comline_args[0]),'all')                
+        else:
+            get_cfg(comline_args[0],comline_args[1])            
+            return bench_run(tag_id_switcher(comline_args[0]),comline_args[1])                
+   
+    #bechmarks with potential extra arguments are handled on individual basis via elifs
+    elif comline_args[0]=='osu':
+        if len(comline_args) < 3 or comline_args[2]=='all':
+            get_cfg(comline_args[0])
+            return bench_run(tag_id_switcher(comline_args[0]),'all',comline_args[1])                                       
+        else:
+            get_cfg(comline_args[0],comline_args[2])
+            return bench_run(tag_id_switcher(comline_args[0]),comline_args[2],comline_args[1])
+
+    
 
   
 """
@@ -627,11 +670,15 @@ def check_err_stack():
     else:
         return ''
 
-#[Final]
-def check_status():
-    global menutxt
-    menutxt+=''
-
+def show_err_stack():
+    elist = '\n'
+    if len(error_stack)==0:
+        elist +=FCOL[4]+'no errors detected!'+FEND+'\n'
+    else:
+        elist =FCOL[9]+'recent errors...'+FEND+'\n'
+        while len(error_stack)!=0:
+            elist += error_stack.pop()+'\n'
+    return elist
 
 def shell(cmd):
     global menutxt
@@ -640,7 +687,7 @@ def shell(cmd):
         p = subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
         if termination_logging and p.returncode!=0:
             if info_feed:
-                menutxt+='\n'+FCOL[7]+'<info> '+FEND+'non zero termination for >>'+cmd+'<<'
+                menutxt+=FCOL[7]+'<info> '+FEND+'non zero termination for >>'+cmd+'<<'+'\n'
             error_log('subshell: non zero termination for >>'+cmd+'<<')
         return p.stdout.decode('UTF-8')
     except Exception as exc:
@@ -852,7 +899,7 @@ def tag_id_switcher(bench):
         return switcher.get(bench) 
     
     except KeyError:
-        menutxt+=FCOL[9]+FORM[0]+'---unkown bench type---'+FEND
+        menutxt+=FCOL[9]+FORM[0]+'---unkown bench type---'+FEND+'\n'
         error_log('an unkown bench-reference was used: '+str(bench), locals(), traceback.format_exc())
         return '-1'
 
@@ -878,7 +925,7 @@ def get_target_path(spec):
     else:
         if path_logging:
             if info_feed:
-                menutxt+='\n'+FCOL[7]+'<info> '+FEND+'a path for >>'+spec[:spec.find('^')]+'<< couldn\'t be found!'
+                menutxt+=FCOL[7]+'<info> '+FEND+'a path for >>'+spec[:spec.find('^')]+'<< couldn\'t be found!'+'\n'
             error_log('a path for >>'+spec[:spec.find('^')]+'<< couldn\'t be found!', locals())
         return 'no path found!'
 
@@ -900,31 +947,14 @@ def farg_to_list(farg, bench):
         names[names.index(e)] = bench+'_cfg_'+str(e)+'.txt'
     return names
 
-#Eine Partition muss angegeben werden, sonst wird der User aufgefordert zu ergänzen
-def eval_partition(profile, name): 
-    error_log('no partition found for '+'>>'+name+'<<!', locals())
-    while True:
-        #clear()
-        print('no partition found for '+'>>'+name+'<<!')
-        avail_part = shell('sinfo -h --format=%R')
-        print('e.g. '+avail_part)
-        inp = input_format()
-        if inp in avail_part.split():
-            return inp
-        else:
-            continue
-
-def write_slurm_params(profile, type):    
+def write_slurm_params(profile, type):
+    global menutxt
+    
     #Shebang
     txt='#!/bin/bash\n'
     #Partition
     if profile[3][0]!='':
         txt+='#SBATCH --partition={}\n'.format(profile[3][0])
-    else:         
-        if type=='jobskript':             
-            eval_partition(profile, profile[0][0])         
-        if type=='batchskript':             
-            eval_partition(profile, 'das Batch-Skript (<=> allg. config)')
     #Nodezahl
     if profile[3][1]!='':
         txt+='#SBATCH --nodes={}\n'.format(profile[3][1])
@@ -1030,7 +1060,14 @@ def clean(inpt = 'all'):
              shell('rm {}/install.out'.format(LOC)) 
              
     return rtxt+FCOL[4]+'done!'+FEND    
-    
+
+def clean_dummy_projects():
+    dummy_list = []
+    cmd='find {}/projects -name \'*@*[dummy]*\' -path \'{}/projects*\''.format(LOC, LOC)
+    dummy_list = shell(cmd).split('\n')
+    for d in dummy_list:
+        if d.find('[dummy]')!=-1:
+            shell('rm -r {}'.format(d))
 
 def color_check():
     global FCOL, FBGR, FORM
@@ -1095,7 +1132,7 @@ def draw_table(array, size = t_width, offset = 0, factor = 0.8, title='Highlight
     tbl = ''
     
     if linesize<30:
-        menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'<warning> very small window size detected, drawn tables might be distorted!'
+        menutxt+=FCOL[6]+'<warning> '+FEND+'very small window size detected, drawn tables might be distorted!'+'\n'
     
     #Breite der Einträge (d.h. Elemente einer Zeile)
     entry_width = int(linesize/len(crange))
@@ -1242,7 +1279,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
         if len(selected_profiles)==0:
             menutxt+=FCOL[6]+'no known profiles were selected!'+FEND+'\n'
             menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
-            return ''
+            return '-1'
         
     #indices list for profiles not available for our current run
     #this second check is relevant for flag-based execution too
@@ -1255,7 +1292,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
                 error_log('no valid path to spack binary available!', locals())
                 menutxt+=FCOL[9]+FORM[0]+'no valid path to spack binary available!'+FEND+'\n'
                 menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
-                return ''
+                return '-1'
             error_log('profile: '+selected_profiles[i][0][0]+' was deselected! (no path known)'+'\n'+problem, locals())
             menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
             dlist.append(i)
@@ -1269,7 +1306,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     if len(selected_profiles)==0:
         menutxt+=FCOL[6]+'no selected profiles were available!'+FEND+'\n'
         menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
-        return ''
+        return '-1'
     
     if dbg and menu_ctrl==True:
         menutxt+='\n\n'+FCOL[15]+'--- '+'summary'+' ---'+FEND+'\n\n'
@@ -1303,7 +1340,9 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     first_job=True
     tag = tag_id_switcher(bench_id)
     
-    t_id = time.strftime("%H%M%S_%d%m%Y", time.localtime())
+    t_id = time.strftime('%H%M%S_%d%m%Y', time.localtime())
+    if test_only:
+        t_id+='[dummy]'
     
     #for no iterations this value will be incremented up to len(selected_profiles)
     dependency_offset = 0
@@ -1318,7 +1357,7 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
         shell('mkdir -p '+res_dir[:-1])
     
     #Bauen des Batch-Skripts, anhand der Parameter aus der allgemeinen Config
-    batchtxt=write_slurm_params(cfg_profiles[0][0], 'batchskript')
+    batchtxt=write_slurm_params(cfg_profiles[0][0], 'batchscript')
     batchtxt+='#SBATCH --job-name='+tag+'_run'+'@'+t_id+'\n'
     batchtxt+='#SBATCH --output=/dev/null\n'
     batchtxt+='#SBATCH --error='+run_dir+'batch.err\n\n'
@@ -1371,7 +1410,7 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
     file_w(run_dir+'batch.sh',batchtxt,'a')
-    shell('chmod +x '+run_dir+'batch.sh')    
+    shell('chmod +x '+run_dir+'batch.sh')
     return run_dir+'batch.sh' 
 
 def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
@@ -1387,7 +1426,7 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
     if num==0:
         num=''
     else:
-        num='#'+str(num)
+        num=str(num)+'#'
     
     jobtxt=''
     
@@ -1426,9 +1465,9 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
     if os.path.isdir(run_dir[:-1])==True:
-        file_w(run_dir+'{}{}.sh'.format(profile[0][0][:-4], num),jobtxt,'a')
-        shell('chmod +x '+run_dir+'{}{}.sh'.format(profile[0][0][:-4], num))
-    return run_dir+'{}{}.sh'.format(profile[0][0][:-4], num)
+        file_w(run_dir+'{}{}.sh'.format(num, profile[0][0][:-4]),jobtxt,'a')
+        shell('chmod +x '+run_dir+'{}{}.sh'.format(num, profile[0][0][:-4])) 
+    return run_dir+'{}{}.sh'.format(num, profile[0][0][:-4])
 
 def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output,res_dir):
 
@@ -1510,7 +1549,7 @@ def check_expr_syn(expr, name):
     if syn_err:
         message= '\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error: {})\n{}{}\n'.format(syn_err[0],expr,FCOL[8])+('^').rjust(syn_err.span()[0]+1)+('^').rjust(len(syn_err[0])-1)+FEND
         menutxt+=message
-        error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(syn_err.span()[0]+21+len(name))+('^').rjust(len(syn_err[0])-1),locals())        
+        error_log('syntax error at {}: {}\n'.format(name,expr)+('^').rjust(syn_err.span()[0]+21+len(name))+('^').rjust(len(syn_err[0])-1),locals())        
         return message
     
     for _ in expr_list:
@@ -1519,8 +1558,8 @@ def check_expr_syn(expr, name):
             message='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+name+FEND+' was deselected! (syntax error)\n{}{}\n'.format(expr,FCOL[8])+('^').rjust(pos+1)+FEND+'\n'
             menutxt+=message
             return message
-            error_log('<syntax error> at {}: {}\n'.format(name,expr)+('^').rjust(pos+21+len(name)),locals())           
-            return menutxt
+            error_log('syntax error at {}: {}\n'.format(name,expr)+('^').rjust(pos+21+len(name)),locals())           
+            return message
     return 'True'
 
 #Schreibt Script zum installieren der specs 
@@ -1608,7 +1647,7 @@ print_menu.updatetime=0
 
 def menu():
     save_times()
-    global error_stack, get_info
+    global error_stack, get_info, menutxt
  
     #Damit man die Optionen sehen kann
     print_menu(initm)
@@ -1626,7 +1665,8 @@ def menu():
         elif opt == '2' or opt == 'Info':
             #Wir wollen auf jeden Fall auch die package Infos, selbst wenn refresh aus oder zu früh ist
             get_info = True
-            print_menu(draw_table(best_list, t_width, 0, 0.5))
+            menutxt+=draw_table(best_list, t_width, 0, 0.5)
+            print_menu('')
         elif opt.isdigit() and int(opt)>2 and int(opt)<=len(BENCH_ID_LIST)+1:
             #-2 ist der Offset der die Positionen 'Option' und 'Info' ausgleicht
             try:
@@ -1635,14 +1675,7 @@ def menu():
             except KeyError:
                 print_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': this is option is not implemented!')            
         elif opt == str(len(BENCH_ID_LIST)+2):
-            elist = ''
-            if len(error_stack)==0:
-                elist =FCOL[4]+'no errors detected! \n'+FEND
-            else:
-                elist =FCOL[9]+'recent errors... \n'+FEND
-            while len(error_stack)!=0:
-                elist += '\n' + error_stack.pop()
-            print_menu(elist)
+            print_menu(show_err_stack())
         elif opt[0:5] == 'code:':
             r = code_eval(opt[5:])
             print_menu(r)
@@ -1951,8 +1984,8 @@ def get_mem_digit(pos):
 
 #Startpunkt
 def main():
-    clear()
     cl_arg()
+    
     
 if __name__ == "__main__":
     main()
