@@ -1366,6 +1366,9 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     #individual jobscripts
     for profile in selected_profiles:
     
+        if os.path.isdir(res_dir+profile[0][0][:-4])==False:     
+            shell('mkdir -p '+res_dir+profile[0][0][:-4])        
+        
         #profile [1] <=> meta-settings [0] <=> first entry: how many iterations are disired?
         num = int(profile[1][0])
     
@@ -1458,13 +1461,13 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
         jobtxt+='#SBATCH --job-name={}\n'.format(num_workaround+shortened_name)
         #Ziel für Output (sollte in (...)[results] landen)
         if profile[4][10]=='' and bench_id != HPCG_ID:
-            jobtxt+='#SBATCH --output={}\n'.format(res_dir+num_workaround+shortened_name+'/'+num_workaround+shortened_name+'.out')
+            jobtxt+='#SBATCH --output={}\n'.format(res_dir+shortened_name+'/'+num_workaround+shortened_name+'.out')
         #Output wird für hpcg manuell in execute_line() gehandelt
         if bench_id == HPCG_ID:
             jobtxt+='#SBATCH --output=/dev/null\n'
         #Ziel für Fehler (sollte in (...)[results] landen)
         if profile[4][11]=='':
-            jobtxt+='#SBATCH --error={}\n'.format(res_dir+num_workaround+shortened_name+'/'+num_workaround+shortened_name+'.err')
+            jobtxt+='#SBATCH --error={}\n'.format(res_dir+shortened_name+'/'+num_workaround+shortened_name+'.err')
         jobtxt+='\n'
         #Sourcen von spack   
         jobtxt+='source {}/share/spack/setup-env.sh\n'.format(SPACK_XPTH[:-9])
@@ -1472,7 +1475,7 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
         jobtxt+= 'spack load {}\n'.format(profile[0][3])   
         jobtxt+='\n'
         #Skriptzeile in der eine Binary ausgeführt wird
-        jobtxt+=execute_line(bench_id, bin_path, profile[4][1], profile[4][2], extra_args, res_dir+num_workaround+shortened_name+'/'+num_workaround+shortest_name+'.out', res_dir+num_workaround+shortest_name)
+        jobtxt+=execute_line(bench_id, bin_path, profile[4][1], profile[4][2], extra_args, res_dir+num_workaround+shortened_name+'/'+num_workaround+shortened_name+'.out', res_dir+num_workaround+shortened_name)
         #TODO: Entladen von Modulen, nötig? Das ist ja ein abgeschlossenes Jobscript...
         #jobtxt+= 'spack unload {}\n'.format(profile[0][3])
     else:
