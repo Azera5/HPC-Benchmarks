@@ -335,7 +335,7 @@ def evaluate_paths():
         #Wir nehmen die erstbeste spack Binary, wenn nichts per Hand spezifiziert wurde
         SPACK_XPTH = r_list[0].strip()
         file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH,4)
-        initm+='Da kein Verzeichnis zur spack Binary spezifiziert war, wurde das Erstbeste von ~/... aus genommen:\n'+SPACK_XPTH+'\n' 
+        initm+='Da kein Verzeichnis zur spack Binary spezifiziert war, wurde das Erstbeste von ~/... aus genommen:\n'+SPACK_XPTH+'\n'
         
     #Hier kommen spezielle Pfade für verschiednste Teilaufgaben
     CONFIG_TO_DAT_XPTH = LOC+'/config_to_dat.py'
@@ -2000,7 +2000,7 @@ def get_mem_digit(pos):
     except Exception as exc:     
         error_log('') 
 """
-
+    
 #Startpunkt
 def main():
     cl_arg()
