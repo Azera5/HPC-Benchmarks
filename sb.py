@@ -947,41 +947,40 @@ def farg_to_list(farg, bench):
         names[names.index(e)] = bench+'_cfg_'+str(e)+'.txt'
     return names
 
-def write_slurm_params(profile, type):
+def write_slurm_params(profile, type,block):
     global menutxt
-    
     #Shebang
     txt='#!/bin/bash\n'
     #Partition
-    if profile[3][0]!='':
-        txt+='#SBATCH --partition={}\n'.format(profile[3][0])
+    if profile[block][0]!='':
+        txt+='#SBATCH --partition={}\n'.format(profile[block][0])
     #Nodezahl
-    if profile[3][1]!='':
-        txt+='#SBATCH --nodes={}\n'.format(profile[3][1])
+    if profile[block][1]!='':
+        txt+='#SBATCH --nodes={}\n'.format(profile[block][1])
     #Anzahl der Prozesse
-    if profile[3][2]!='':
-        txt+='#SBATCH --ntasks={}\n'.format(profile[3][2])
+    if profile[block][2]!='':
+        txt+='#SBATCH --ntasks={}\n'.format(profile[block][2])
     #Anzahl der Prozesse pro Node
-    if profile[3][3]!='':       
-        txt+='#SBATCH --ntasks-per-node={}\n'.format(profile[3][3])
+    if profile[block][3]!='':       
+        txt+='#SBATCH --ntasks-per-node={}\n'.format(profile[block][3])
     #Anzahl der CPUs pro Task/Prozess(default lt. SLURM-Doku: 1 Kern per Task)
-    if profile[3][4]!='':
-        txt+='#SBATCH --cpus-per-task={}\n'.format(profile[3][4])
+    if profile[block][4]!='':
+        txt+='#SBATCH --cpus-per-task={}\n'.format(profile[block][4])
     #Anzahl an allokiertem Speicher pro CPU
-    if profile[3][5]!='':
-        txt+='#SBATCH --mem-per-cpu={}\n'.format(profile[3][5])
+    if profile[block][5]!='':
+        txt+='#SBATCH --mem-per-cpu={}\n'.format(profile[block][5])
     #Startzeitpunkt (z.B. now+180 <=> in drei Minuten starten)
-    if profile[3][6]!='':
-        txt+='#SBATCH --begin={}\n'.format(profile[3][6])
+    if profile[block][6]!='':
+        txt+='#SBATCH --begin={}\n'.format(profile[block][6])
     #Zeitlimit 
-    if profile[3][7]!='':
-        txt+='#SBATCH --time={}\n'.format(profile[3][7])
+    if profile[block][7]!='':
+        txt+='#SBATCH --time={}\n'.format(profile[block][7])
     #Ziel-User für Emailbenachrichtigungen
-    if profile[3][8]!='':
-        txt+='#SBATCH --mail-user={}\n'.format(profile[3][8])
+    if profile[block][8]!='':
+        txt+='#SBATCH --mail-user={}\n'.format(profile[block][8])
     #Valide Trigger für Benachrichtigungen
-    if profile[3][9]!='':
-        txt+='#SBATCH --mail-type={}\n'.format(profile[3][9])
+    if profile[block][9]!='':
+        txt+='#SBATCH --mail-type={}\n'.format(profile[block][9])
     
     return txt
 
@@ -1357,7 +1356,7 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
         shell('mkdir -p '+res_dir[:-1])
     
     #Bauen des Batch-Skripts, anhand der Parameter aus der allgemeinen Config
-    batchtxt=write_slurm_params(cfg_profiles[0][0], 'batchscript')
+    batchtxt=write_slurm_params(cfg_profiles[0][0], 'batchscript',3)
     batchtxt+='#SBATCH --job-name='+tag+'_run'+'@'+t_id+'\n'
     batchtxt+='#SBATCH --output=/dev/null\n'
     batchtxt+='#SBATCH --error='+run_dir+'batch.err\n\n'
@@ -1437,7 +1436,7 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
         bin_path = ''
     #Im fünften Config-Block eines Profils steht potentiell ein händisch gebautes Skript     
     if len(profile[5])==0:
-        jobtxt=write_slurm_params(profile, 'jobskript')
+        jobtxt=write_slurm_params(profile, 'jobskript',4)
         #Jobname (<=> Profilname)
         jobtxt+='#SBATCH --job-name={}\n'.format(profile[0][0][:-4])
         #Ziel für Output (sollte in (...)[results] landen)
@@ -1505,7 +1504,7 @@ def build_plot(t_id, bench,run_dir):
     >>>>>   individual handling per benchmark        <<<<
     """
 
-    jobtxt=write_slurm_params(cfg_profiles[0][0], 'plotskript')
+    jobtxt=write_slurm_params(cfg_profiles[0][0], 'plotskript',3)
     jobtxt+='#SBATCH --job-name='+bench+'_plot\n' 
     jobtxt+='#SBATCH --error='+run_dir+'plot.err\n\n'   
     jobtxt+='#SBATCH --output=/dev/null\n\n'   
