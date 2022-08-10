@@ -54,6 +54,9 @@ BENCH_PTHS = []
 #Muster: [[<<verfügar>>, <<miss>>, <<error>>], ...]
 pkg_info = []
 
+#we memorize the most serious problem regarding the specified path to the spack binary
+spack_problem = ''
+
 #Sammelt kürzliche Fehlermeldungen
 error_stack = []
 #Trägt Informationen des Config-Ordners; Ersteintrag für Metadaten
@@ -85,6 +88,9 @@ menu_ctrl=False
 full_bin_paths=False
 #whether we should equal out the white space differences in config-files automatically
 auto_space_normalization=True
+
+#from what root do we look for spack installations?
+SPACK_SEARCH_ROOT = '~'
 
 #these might help to regulate excessive logging
 termination_logging=True
@@ -153,6 +159,10 @@ FORM_M = [ '\33[1m', '\33[3m', '\33[4m', '\33[7m', '\33[5m', '\33[6m' ]
 #Formatierung beenden
 FEND = '\33[0m'
 
+#resizing the terminal while backgroundcolors are present causes them to 'overflow' their old boundaries within the original line
+#the simplest workaround is to attach the format-end-constant with explicit black background
+FEND = '\33[0m'+'\33[40m'+''
+
 #Testtabellen zum ausdrucken, später kann man highlight Werte tabellarisch organisieren und darstellen
 best_list = [['test', 'liste'],['1000', 'GB/s'],['47', 'TFLOPS'],['...', '...']]
 test_list1 = [['141535', '5.25', 'asfasf'],['GB/s', 'GB/s', 'GB/s'],['111111', '22222222', '333333'],['...', '...', '...']]
@@ -196,7 +206,7 @@ def cl_arg():
     FCOL[7]+'key difference: '+FEND+'creates *non-persistent* dummy projects and prints the error stack!\n'+
     FCOL[2]+'     e.g.: -t hpl 1,3-4,Test1\n'+
     '           etc.\n\n'+FEND+
-    FCOL[15]+'<info> '+FEND+'clean up is >>rm -r ...<<-based respective to sub-directories named like >>*@*[dummy]<<,\n'+
+    FCOL[15]+'<info>    '+FEND+'clean up is >>rm -r ...<<-based respective to sub-directories named like >>*@*[dummy]<<,\n'+
     'please be cautious with naming data in the project directory this way\n\n')
     
     parser.add_argument('-p','--profiles',nargs=1,type=str,help=''+
@@ -212,8 +222,9 @@ def cl_arg():
     '  '+FCOL[7]+'all:'+FEND+' cleans projects folder, install scripts and log.txt,'+FCOL[13]+' not mem.txt!\n'+FEND+     
     '     '+FCOL[2]+'e.g.: -c projects\n'+
     '           -c all\n'+FEND+
-    FCOL[15]+'<info> '+FEND+'please consider saving relevant project results beforehand\n')
+    FCOL[15]+'<info>    '+FEND+'please consider saving relevant project results beforehand\n')
     
+
     evaluate_paths()
     args= parser.parse_args()
     
@@ -254,9 +265,7 @@ def cl_arg():
                 names=farg_to_list(args.install[1],args.install[0])                
                 get_cfg(args.install[0],args.install[1])               
                 expr=get_all_specs(args.install[0],names)
-            
-        
-        
+                   
         script_pth=install_spec(expr)
         
         if menutxt !='':
@@ -328,8 +337,11 @@ def evaluate_paths():
             pth = LOC+'/configs/{}/'.format(tag_id_switcher(id))
         BENCH_PTHS[id]=pth
         loadprogress()
-
-    check_spack_status()
+    
+    #is there any path we're supposed to use?
+    SPACK_XPTH = config_cut(file_r(BENCH_PTHS[MISC_ID]+'config.txt', 4)).rstrip()
+    SPACK_SEARCH_ROOT = config_cut(file_r(BENCH_PTHS[MISC_ID]+'config.txt', 4)).rstrip()
+    extensive_spack_evaluation()
         
     #Hier kommen spezielle Pfade für verschiednste Teilaufgaben
     CONFIG_TO_DAT_XPTH = LOC+'/config_to_dat.py'
@@ -407,6 +419,7 @@ check_data.time=0
 def check_dirs():
     global initm
     timestart = time.time()
+    spack_errorcheck()
     for pth in BENCH_PTHS:
         loadprogress()
         if BENCH_PTHS.index(pth)==0:
@@ -434,7 +447,6 @@ def get_cfg(bench,farg='all'):
         names = farg_to_list(farg,bench)
         cfg_profiles[id]=cfg_profiles[id][:len(names)]
     
-
     #Für jedes Profil...
     for p in names:
         block = 1
@@ -461,7 +473,7 @@ def get_cfg(bench,farg='all'):
             if auto_space_normalization:
                 normalise_config(get_cfg_path(bench)+p)
             spec = get_spec(spec_,bench)
-            cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]  
+            cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]
         #Letzter Block & Resett der Variablen
         cfg_profiles[id][names.index(p)][block]=sublist
         sublist, spec_, spec = [], [], '' 
@@ -586,7 +598,7 @@ def error_log(txt, local_table={}, exc_info=''):
     call_hierarchy, line_hierarchy = [], []
     #locals
     local_varname, local_varvalue, local_varnumber, local_scale = [], [], [], []
-       
+    
     if txt!='':
         txt = 'further information:\n'+txt
     if dbg:
@@ -676,7 +688,11 @@ def shell(cmd):
         p = subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
         if termination_logging and p.returncode!=0:
             if info_feed:
-                menutxt+=FCOL[7]+'<info> '+FEND+'non zero termination for >>'+cmd+'<<'+'\n'
+                line_without_cmd = ml+'<info>    '+'non zero termination for >>'+'(...)'+'<<'
+                if len(line_without_cmd)+len(cmd)>t_width:
+                    menutxt+=FCOL[7]+'<info>    '+FEND+'non zero termination for >>'+cmd[:t_width-len(line_without_cmd)]+FCOL[0]+'(...)'+FEND+'<<'+'\n'
+                else:
+                    menutxt+=FCOL[7]+'<info>    '+FEND+'non zero termination for >>'+cmd+'<<'+'\n'
             error_log('subshell: non zero termination for >>'+cmd+'<<')
         return p.stdout.decode('UTF-8')
     except Exception as exc:
@@ -749,7 +765,7 @@ def list_econcat(list_a, list_b, symb_s='', symb_m='', symb_e=''):
 #Ein Art Prompt für den Nutzer
 def input_format():
     print(' ')
-    print(FCOL[11]+FORM[0]+'Input:'+FEND+' ', end='')
+    print(FCOL[14]+'<input>'+FEND+' ', end='')
     return input()
 
 def clear():
@@ -800,21 +816,24 @@ def normalise_config(name, scale=12, blocks=5, tabs=False, tabsize=8):
 #Bug: Liefert z.T. auch Verzeichnisse! <--- TODO
 #Liefert Files, keine Verz.; Erwartet Pfade in der Form /dir1/dir2/.../
 def get_names(pth):
+    global menutxt
     r = os.listdir(pth)
     for _ in r:
-        if os.path.isdir(_)==True:
-            #print(FCOL[8]+'disregarded: '+_+FEND)
+        if check_is_dir(pth+str(_)):
             r.remove(_)
+            menutxt+='remove: '+str(_)+'\n'
     return r
 
 #Bug: Liefert z.T. Verzeichnisse auch nicht! <--- TODO
 #Liefert alle Verzeichnis; Erwartet Pfade in der Form /dir1/dir2/.../
 def get_dirs(pth):
-    r = os.listdir(pth)
-    for _ in r:
-        if os.path.isdir(_)==False:
-            #print(FCOL[8]+'disregarded: '+_+FEND)
-            r.remove(_)
+    global menutxt
+    t = os.listdir(pth)
+    r = []
+    for _ in t:
+        if check_is_dir(pth+str(_)):
+            r.append(_)
+            menutxt+='remove: '+str(_)+'\n'
     return r
 
 #Liefert Textfiles eines bestimmten Typs (z.B. hpl_cfg_(...).txt)
@@ -914,7 +933,7 @@ def get_target_path(spec):
     else:
         if path_logging:
             if info_feed:
-                menutxt+=FCOL[7]+'<info> '+FEND+'a path for >>'+spec[:spec.find('^')]+'<< couldn\'t be found!'+'\n'
+                menutxt+=FCOL[7]+'<info>    '+FEND+'a path for >>'+spec[:spec.find('^')]+'<< couldn\'t be found!'+'\n'
             error_log('a path for >>'+spec[:spec.find('^')]+'<< couldn\'t be found!', locals())
         return 'no path found!'
 
@@ -1131,18 +1150,20 @@ def draw_table(array, size = t_width, offset = 0, factor = 0.8, title='Highlight
     else:
         rest = 0
     
-    #Debug-Informationen
+    """
+    #debug information
     if dbg:
         dbg_txt=''
         dbg_txt+=ml+'\t'*offset+FCOL[15]+'--Debug-Hints--'+FEND+'\n'
-        dbg_txt+=ml+'\t'*offset+FCOL[15]+'t_width: '+'\t\t'+str(t_width)+FCOL[0]+'\t<=> real terminal size\n'+FEND
+        dbg_txt+=ml+'\t'*offset+FCOL[15]+'t_width: '+'\t\t\t'+str(t_width)+FCOL[0]+'\t<=> real terminal size\n'+FEND
         dbg_txt+=ml+'\t'*offset+FCOL[15]+'array: '+'\t\t\t'+str(len(lrange))+'x'+str(len(crange))+FCOL[0]+'\t<=> array structure\n'+FEND
-        dbg_txt+=ml+'\t'*offset+FCOL[15]+'linesize: '+'\t\t'+str(linesize)+FCOL[0]+'\t<=> used table size\n'+FEND
+        dbg_txt+=ml+'\t'*offset+FCOL[15]+'linesize: '+'\t\t\t'+str(linesize)+FCOL[0]+'\t<=> used table size\n'+FEND
         dbg_txt+=ml+'\t'*offset+FCOL[15]+'entry_width: '+'\t\t'+str(entry_width)+FCOL[0]+'\t<=> size per table entry\n'+FEND
         dbg_txt+=ml+'\t'*offset+FCOL[15]+'scaling fac.: '+'\t\t'+str(factor)+FCOL[0]+'\t<=> scales targeted size\n'+FEND
         dbg_txt+=ml+'\t'*offset+FCOL[15]+'tab. offset: '+'\t\t'+str(offset)+FCOL[0]+'\n'+FEND
         
         print(dbg_txt)
+    """
     
     #Tabellenbau
     for i in lrange:       
@@ -1175,11 +1196,8 @@ def avail_pkg(id):
     for p in cfg_profiles[id]:
         loadprogress()
         res = shell('{} find '.format(SPACK_XPTH)+p[0][3])
-        if res.find('Kommando nicht gefunden')>-1 or res.find('command not found')>-1:
-            pkg_info[id][0] = FCOL[9]+'?/? (command not available!)'+FEND
-            pkg_info[id][1] = FCOL[9]+'?'+FEND
-            pkg_info[id][2] = FCOL[9]+'?'+FEND
-            error_log('information regarding package-availability is unavailable!\n used spack-binary: {}'.format(SPACK_XPTH), locals())
+        if res.find('Kommando nicht gefunden')>-1 or res.find('command not found')>-1 or spack_problem!='':
+            rlist.append(FCOL[0]+p[0][0]+FEND)
         else:
             if str(res[0:14])=='==> No package':
                 avl-=1
@@ -1191,34 +1209,35 @@ def avail_pkg(id):
                 rlist.append(FCOL[9]+p[0][0]+FEND)
             else:
                 rlist.append(FCOL[4]+p[0][0]+FEND)
-    if avl==full:
-        pkg_info[id][0] = FCOL[5]+str(avl)+FEND+'/'+str(full)+FORM[1]+' packages pot. av. '+FEND
-    elif avl!=0:
-        pkg_info[id][0] = FCOL[7]+str(avl)+FEND+'/'+str(full)+FORM[1]+' packages pot. av. '+FEND
+    if spack_problem=='':
+        if avl==full:
+            pkg_info[id][0] = FCOL[5]+str(avl)+FEND+'/'+str(full)+FORM[1]+' avl. '+FEND
+        elif avl!=0:
+            pkg_info[id][0] = FCOL[7]+str(avl)+FEND+'/'+str(full)+FORM[1]+' avl. '+FEND
+        else:
+            pkg_info[id][0] = FCOL[9]+str(avl)+FEND+'/'+str(full)+FORM[1]+' avl. '+FEND
+        if miss>0:
+            pkg_info[id][1] = '('+FCOL[7]+str(miss)+FEND+FORM[1]+' mis., '+FEND
+        else:
+            pkg_info[id][1] = '('+str(miss)+FORM[1]+' mis., '+FEND
+        if err>0:
+            pkg_info[id][2] = FCOL[9]+str(err)+FEND+FORM[1]+' err.'+FEND+')'
+        else:
+            pkg_info[id][2] = str(err)+FORM[1]+' err.'+FEND+')'
     else:
-        pkg_info[id][0] = FCOL[9]+str(avl)+FEND+'/'+str(full)+FORM[1]+' packages pot. av. '+FEND
-    if miss>0:
-        pkg_info[id][1] = '('+FCOL[7]+str(miss)+FEND+FORM[1]+' misses, '+FEND
-    else:
-        pkg_info[id][1] = '('+str(miss)+FORM[1]+' misses, '+FEND
-    if err>0:
-        pkg_info[id][2] = FCOL[9]+str(err)+FEND+FORM[1]+' errors'+FEND+')'
-    else:
-        pkg_info[id][2] = str(err)+FORM[1]+' errors'+FEND+')'
+        pkg_info[id][0] = FCOL[9]+'?/?'+FEND+' avl.'
+        pkg_info[id][1] = FCOL[9]+' ?'+FEND+' mis.'
+        pkg_info[id][2] = FCOL[9]+' ?'+FEND+' err.'
+        error_log('information regarding package-availability is unavailable!\n used spack-binary: {}'.format(SPACK_XPTH))
     return rlist
 
 
-"""
-#Prüft ob ein Pfad existiert 
-def check_path(pth):
-    eval_path=shell('find '+pth)
-    if len(pth) > 0 and eval_path.find('find:')==-1:       
-        return True
-    else:       
-        return False
-"""
 
-        
+def check_is_dir(pth):
+    if shell('if [[ -d {} ]]; then echo \'true\'; else echo \'false\'; fi'.format(pth))=='true\n':
+        return True
+    return False
+   
 
 #Skriptbau-Funktionen
 #Default Argument <=> wir wollen alle Profile laufen lassen
@@ -1274,16 +1293,19 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     #indices list for profiles not available for our current run
     #this second check is relevant for flag-based execution too
     dlist=[]
-    
+
     for i in range(len(selected_profiles)):
         if selected_profiles[i][0][2]=='no path found!':            
-            problem = shell('{} find '.format(SPACK_XPTH)+selected_profiles[i][0][3])
-            if problem.find('Kommando nicht gefunden')>-1 or problem.find('command not found')>-1:
-                error_log('no valid path to spack binary available!', locals())
+            res = shell('{} find '.format(SPACK_XPTH)+selected_profiles[i][0][3])
+            if res.find('Kommando nicht gefunden')>-1 or res.find('command not found')>-1 or spack_problem!='':
+                if spack_problem!='':
+                    error_log('a {} run failed, reason: {}'.format(tag, spack_problem))
+                else:
+                    error_log('a {} run failed, reason: no valid spack binary-path available'.format(tag))
                 menutxt+=FCOL[9]+FORM[0]+'no valid path to spack binary available!'+FEND+'\n'
                 menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
                 return '-1'
-            error_log('profile: '+selected_profiles[i][0][0]+' was deselected! (no path known)'+'\n'+problem, locals())
+            error_log('profile: '+selected_profiles[i][0][0]+' was deselected! (no path known)'+'\n'+res, locals())
             menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
             dlist.append(i)
             unavail_names.append(selected_profiles[i][0][0])
@@ -1680,16 +1702,12 @@ def menu():
                 menutxt+=draw_table(data, t_width, 0, 0.5, title='Boot Up Stats')
                 menutxt+='\n'
             if info_feed:
-                data = shell(SPACK_XPTH+' arch')
-                if shell('if [[ -x {} ]]; then echo \'true\'; else echo \'false\'; fi'.format(SPACK_XPTH))!='false':
-                    data_pth = SPACK_XPTH[:-10]
-                    data_plt = shell(SPACK_XPTH+' arch')
-                    menutxt+=shell('if [[ -x {} ]]; then echo \'true\'; else echo \'false\'; fi'.format(SPACK_XPTH))
+                if spack_problem=='':
+                    menutxt+=FCOL[15]+'<info>    '+FEND+'currently used spack binary:   '+FCOL[15]+SPACK_XPTH[:-10]+FEND+FCOL[0]+FEND+SPACK_XPTH[-10:]+FEND+'\n'
+                    menutxt+=FCOL[15]+'<info>    '+FEND+'currently used platform:       '+shell(SPACK_XPTH+' arch')+'\n'
                 else:
-                    data_pth = FCOL[9]+'invalid!'+FEND
-                    data_plt = FCOL[9]+'invalid!'+FEND
-                menutxt+=FCOL[15]+'<info> '+FEND+'currently used spack dir:   '+data_pth+'\n'
-                menutxt+=FCOL[15]+'<info> '+FEND+'currently used platform:    '+data_plt+'\n'
+                    menutxt+=FCOL[15]+'<info>    '+FEND+'currently used spack binary:   '+FCOL[6]+SPACK_XPTH[:-10]+FEND+'\n'
+                    menutxt+=FCOL[6]+'<warning> '+FEND+'{}\n'.format(spack_problem)
             print_menu('')
         elif opt.isdigit() and int(opt)>2 and int(opt)<=len(BENCH_ID_LIST)+1:
             #-2 ist der Offset der die Positionen 'Option' und 'Info' ausgleicht
@@ -1699,7 +1717,8 @@ def menu():
             except KeyError:
                 print_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': this is option is not implemented!')            
         elif opt == str(len(BENCH_ID_LIST)+2):
-            print_menu(show_err_stack())
+            menutxt+=show_err_stack()
+            print_menu()
         elif opt[0:5] == 'code:':
             r = code_eval(opt[5:])
             print_menu(r)
@@ -1729,7 +1748,7 @@ def print_options_menu(txt = ''):
     print(ml+'(9) '+mr+' dis-/enable <info>-feed')
     print(ml+'(10)'+mr+' dis-/enable termination logging')
     print(ml+'(11)'+mr+' dis-/enable path logging')
-    print(ml+'(11)'+mr+' dis-/enable whitespace normalization (configs)')
+    print(ml+'(12)'+mr+' dis-/enable whitespace normalization (configs)')
     
     
     print(' ')
@@ -1904,26 +1923,22 @@ def hpl_menu():
             print_menu()
             break
         elif opt == '1' or opt == 'run':
-            #i = 0
-            txt=ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
+            txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: >>1-3,test,9<<\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
             txt+='\n\n'+ml+FBGR[0]+'found profiles:'+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(HPL_ID):
                 if left_size<len(name+mr):
-                    left_size-=len(ml)
                     txt+='\n'+ml
+                    left_size=t_width-len(ml)
                 txt+=FORM[0]+name+FEND+mr
                 left_size-=len(name+mr)
+            if spack_problem!='':
+                txt+='\n\n'+ml+FCOL[6]+'<warning> '+FEND+'no availability information!\n'+ml+'          reason: {}\n'.format(spack_problem)+'          '+ml+FCOL[6]+SPACK_XPTH+FEND
             print_hpl_menu(txt)
             scr_pth = bench_run(HPL_ID, input_format().replace(' ',''))
             print_hpl_menu('')
-            """
-            txt=ml+FCOL[13]+FORM[0]+'hand over the batch-script to SLURM? (y/n)\n\n'+FEND
-            print_hpl_menu(txt)
-            print_hpl_menu(shell('srun '+scr_pth))
-            """
         elif opt == '2' or opt == 'view':
             print_hpl_menu(view_installed_specs(tag_id_switcher(HPL_ID)))
         elif opt == '3'or opt == 'install':           
@@ -2006,27 +2021,32 @@ def get_mem_digit(pos):
         error_log('') 
 """
 
-def check_spack_status():
+def extensive_spack_evaluation():
     global SPACK_XPTH
     
-    #is there any path we're supposed to use?
-    SPACK_XPTH = str(file_r(BENCH_PTHS[MISC_ID]+'config.txt', 4)).rstrip()
-    test_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()
+    
+    test_list = str(shell('find {} -executable -name spack -path \'*/spack/bin/*\''.format(SPACK_SEARCH_ROOT))).replace('\n',' ').split()
     
     for e in test_list:
         e = e.strip()
     alternatives = False
+    
+    if SPACK_SEARCH_ROOT=='/':
+        search_mode=SPACK_SEARCH_ROOT+FCOL[13]+' [global]'+FEND
+    elif SPACK_SEARCH_ROOT=='~':
+        search_mode=SPACK_SEARCH_ROOT+FCOL[13]+' [local]'+FEND
+    else:
+        search_mode=SPACK_SEARCH_ROOT+FCOL[13]+' [custom]'+FEND
 
     if len(test_list)>0:
         alternatives = True
 
-    #there is but is that an actual spack-directory? 
-    #if os.path.isdir(SPACK_XPTH):
-    if SPACK_XPTH.isspace()==False:
+    #there is a path but is that an actual spack-directory? 
+    if len(SPACK_XPTH)>0 and SPACK_XPTH.isspace()!=True:          
         
         for e in test_list:
             #is that our spack?
-            if e.find(SPACK_XPTH)!=-1:
+            if e.find(SPACK_XPTH)!=-1 and check_is_dir(SPACK_XPTH)==False:
                 #it is and therefore should be used
                 return True
         
@@ -2034,100 +2054,132 @@ def check_spack_status():
         print('\n')
         
         #our spack-path seems invalid, so we have to ask how to continue
-        if os.path.isdir(SPACK_XPTH)==False:
-            print(FCOL[6]+'<warning> '+FEND+'specified spack path seems to be invalid!')
-            print('          '+FCOL[6]+SPACK_XPTH+FEND+'\n')
-        else:
-            print(FCOL[6]+'<warning> '+FEND+'specified path doesn\'t correspond to an spack-installation!')
-            print('          '+FCOL[6]+SPACK_XPTH+FEND+'\n')
+        print(FCOL[6]+'\n\n<warning> '+FEND+'specified path doesn\'t correspond to an spack-installation!')
+        print('          '+FCOL[6]+SPACK_XPTH+FEND+'\n')
             
         if alternatives:
             print(FCOL[15]+'<info>    '+FEND+'these possibly valid options were detected:')
             for e in test_list:
-                print('          '+'[{}.] '.format(test_list.index(e)+1)+e)
+                print('          '+FCOL[15]+'[{}.] '.format(test_list.index(e)+1)+FEND+e)
+            print('          '+FCOL[7]+'search mode:'+FCOL[2]+' {}'.format(search_mode)+FEND)
         else:
-            print('          '+'no alternatives were detected!')
+            print('          '+'no alternatives were detected! ({})'.format(search_mode))
         
         while True:
-            print(FCOL[15]+'\n- - - how to proceed? - - -'+FEND)
+            print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
             print('(1) ignore and proceed as usual with given path')
             print('(2) install spack to the given location')
-            print('(3) terminate the process')
+            print('(3) terminate')
             if alternatives:
-                print('(4) proceed with an alternative (will be saved to config!)')
+                print('(4) proceed with an alternative '+FORM[0]+'(will be saved to config!)'+FEND)
         
             answer=input_format()
+            
         
             if answer==str(1):
                 return True
             elif answer==str(2):
                 install_spack(SPACK_XPTH)
                 return True
-            elif answer==str(3) or 'quit' or 'exit':
+            elif answer==str(3) or answer=='quit' or answer=='exit':
                 sys.exit(-1)
-            elif alternatives and answer==str(4):
-                print('which one? 1 <=> first one; up to '+len(test_list)+' options')
+            elif answer==str(4) and alternatives:
+                print(FCOL[14]+'\n- - - which one? - - -'+FEND)
+                print('1 <=> first one & up to '+str(len(test_list))+' options')
                 SPACK_XPTH = test_list[int(input_format())-1]
-                file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH,4)
+                file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
                 return True
             else:
                 print('\ninvalid input')
         
 
-    #there isn't, so we have to ask how to continue
+    #there is no path specified, so we have to ask how to continue
     else:
-        print(FCOL[6]+'<warning> '+FEND+'there\'s no specified path for spack!\n')
+        print(FCOL[6]+'\n\n<warning> '+FEND+'there\'s no specified path for spack!\n')
 
         if alternatives:
             print(FCOL[15]+'<info>    '+FEND+'these possibly valid options were detected:')
             for e in test_list:
-                print('          '+'[{}.] '.format(test_list.index(e)+1)+e)
+                print('          '+FCOL[15]+'[{}.] '.format(test_list.index(e)+1)+FEND+e)
+            print('          '+FCOL[7]+'search mode:'+FCOL[2]+' {}'.format(search_mode)+FEND)
         else:
-            print('          '+'no alternatives were detected!')
+            print('          '+'no alternatives were detected! ({})'.format(search_mode))
 
         while True:
-            print(FCOL[15]+'\n- - - how to proceed? - - -'+FEND)
+            print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
             print('(1) install spack to a specific location')
-            print('(2) terminate the process')
+            print('(2) terminate')
             if alternatives:
-                print('(3) proceed with an alternative (will be saved to config!)')
+                print('(3) proceed with an alternative '+FORM[0]+'(will be saved to config!)'+FEND)
         
             answer=input_format()
             
             if answer==str(1):
-                print('please specify the full path from home down to the binary (~/.../spack/bin/spack)')
-                print('sb.py was executed in: '+LOC)
-                install_spack(input_format)
+                print(FCOL[14]+'\n- - - please specify the location - - -'+FEND)
+                print('please specify the '+FORM[2]+'full'+FEND+' path down to the binary')
+                print('e.g. .../'+FCOL[5]+'<disired location>'+FEND+'/spack/bin/spack')
+                print(FCOL[7]+'\nsb.py was executed in:\n'+FEND+FCOL[2]+LOC+FEND)
+                print(FCOL[0]+'\ne.g. input for local installation:\n'+LOC+'/spack/bin/spack'+FEND)
+                install_spack(input_format().strip())
                 return True
-            elif answer==str(2) or 'quit' or 'exit':
+            elif answer==str(2) or answer=='quit' or answer=='exit':
                 sys.exit(-1)
             elif alternatives and answer==str(3):
-                print('which one? 1 <=> first one; up to '+len(test_list)+' options')
+                print(FCOL[14]+'\n- - - which one? - - -'+FEND)
+                print('1 <=> first one & up to '+str(len(test_list))+' options')
                 SPACK_XPTH = test_list[int(input_format())-1]
-                file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH,4)
+                file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
                 return True
             else:
                 print('\ninvalid input')
 
 def install_spack(pth):
-    global SPACK_XPTH
+    global SPACK_XPTH, menutxt
     
-    #pth might point to the binary position
-    if pht[-15:]=='spack/bin/spack':
-        inst_pth=pht[:-16]
+    if len(pth)>15:
+        #pth might point to the binary position
+        if pth[-15:]=='spack/bin/spack':
+            inst_pth=pth[:-16]
+        else:
+            inst_pth=pth
+            pth=pth+'/spack/bin/spack'
     else:
-        inst_pth=pht
-        pht=pth+'/spack/bin/spack'
-    cmd='cd {}; git clone https://github.com/spack/spack '.format(inst_pth)
-    #shell(cmd)
-    SPACK_XPTH=pht 
-    #file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH,4)
-    print('mock-installing...\n'+cmd+'\ngoal: '+pht)
-    sys.exit(0)
- 
-    #pull the repo
-    #print(shell(SPACK_XPTH+' arch'))
+        inst_pth=pth
+    if check_is_dir(inst_pth)==False:
+        cmd_ = 'mkdir {};'.format(inst_pth)
+    else:
+        cmd_ = ''
+    #set -e is supposed to prevent an installment if we're in the wrong place
+    cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd_, inst_pth)
+    shell(cmd)
+    SPACK_XPTH=pth 
+    file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
+    menutxt+=FCOL[15]+'<info>    '+FEND+'spack was installed to following location:'+'\n          '+FCOL[15]+inst_pth+FEND
+
+def spack_errorcheck():
+    global menutxt, spack_problem
     
+    if SPACK_XPTH.isspace() and len(SPACK_XPTH)>0:
+        error_log('specified path to the spack binary consists only of whitespaces!')
+        menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'specified path to the spack binary consists only of whitespaces!\n'
+        spack_problem = 'specified path to the spack binary consists only of whitespaces!'
+    
+    #shell('if [[ ! -d {} ]] && [[ -f {} ]]; then echo \'true\'; else echo \'false\'; fi'.format(SPACK_XPTH))
+    if shell('if [[ ! -x {} ]]; then echo \'true\'; else echo \'false\'; fi'.format(SPACK_XPTH))=='true\n':
+        error_log('no execution rights for the specified spack binary!')
+        menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'no execution rights for the specified spack binary!\n'+'          '+SPACK_XPTH
+        spack_problem = 'no execution rights for the specified spack binary!'
+    
+    if shell('if [[ -d {} ]]; then echo \'true\'; else echo \'false\'; fi'.format(SPACK_XPTH))=='true\n':
+        error_log('specified spack binary is a directory!')
+        menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'specified spack binary is a directory!\n'+'          '+SPACK_XPTH
+        spack_problem = 'specified spack binary is a directory!'
+
+    if shell('if [[ ! -e {} ]]; then echo \'true\'; else echo \'false\'; fi'.format(SPACK_XPTH))=='true\n':
+        error_log('specified spack binary doesn\'t exist!\n'+SPACK_XPTH)
+        menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'specified spack binary doesn\'t exist!\n'+'          '+SPACK_XPTH
+        spack_problem = 'specified spack binary doesn\'t exist!'
+
 #Startpunkt
 def main():
     cl_arg()
