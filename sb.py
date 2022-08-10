@@ -12,6 +12,7 @@ import argparse
 from os.path import exists 
 from argparse import RawTextHelpFormatter
 
+
 #debugging
 import sys
 from io import StringIO
@@ -195,7 +196,7 @@ def cl_arg():
     FCOL[7]+'key difference: '+FEND+'creates *non-persistent* dummy projects and prints the error stack!\n'+
     FCOL[2]+'     e.g.: -t hpl 1,3-4,Test1\n'+
     '           etc.\n\n'+FEND+
-    FCOL[15]+'<info>'+FEND+' clean up is >>rm -r ...<<-based respective to sub-directories named like >>*@*[dummy]<<,\n'+
+    FCOL[15]+'<info> '+FEND+'clean up is >>rm -r ...<<-based respective to sub-directories named like >>*@*[dummy]<<,\n'+
     'please be cautious with naming data in the project directory this way\n\n')
     
     parser.add_argument('-p','--profiles',nargs=1,type=str,help=''+
@@ -211,7 +212,7 @@ def cl_arg():
     '  '+FCOL[7]+'all:'+FEND+' cleans projects folder, install scripts and log.txt,'+FCOL[13]+' not mem.txt!\n'+FEND+     
     '     '+FCOL[2]+'e.g.: -c projects\n'+
     '           -c all\n'+FEND+
-    FCOL[15]+'<info>'+FEND+' please consider saving relevant project results beforehand\n')
+    FCOL[15]+'<info> '+FEND+'please consider saving relevant project results beforehand\n')
     
     evaluate_paths()
     args= parser.parse_args()
@@ -328,19 +329,12 @@ def evaluate_paths():
         BENCH_PTHS[id]=pth
         loadprogress()
 
-    #Hier werden die statischen Pfade zu den Binaries (<<Name>>_xpath) bestimmt 
-    SPACK_XPTH = str(file_r(BENCH_PTHS[MISC_ID]+'config.txt', 4)).rstrip()
-    if check_path(SPACK_XPTH)==False:
-        r_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()        
-        #Wir nehmen die erstbeste spack Binary, wenn nichts per Hand spezifiziert wurde
-        SPACK_XPTH = r_list[0].strip()
-        file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH,4)
-        initm+='Da kein Verzeichnis zur spack Binary spezifiziert war, wurde das Erstbeste von ~/... aus genommen:\n'+SPACK_XPTH+'\n'
+    check_spack_status()
         
     #Hier kommen spezielle Pfade für verschiednste Teilaufgaben
     CONFIG_TO_DAT_XPTH = LOC+'/config_to_dat.py'
     PROJECT_PTH=str(file_r(BENCH_PTHS[MISC_ID]+'config.txt', 6)).rstrip()
-    if check_path(PROJECT_PTH[:PROJECT_PTH.find('/project')])==False:
+    if os.path.isdir(PROJECT_PTH[:PROJECT_PTH.find('/project')])==False:
         PROJECT_PTH=LOC+'/projects'
         file_w(BENCH_PTHS[MISC_ID]+'config.txt',PROJECT_PTH,6)
     evaluate_paths.time+=time.time()-timestart
@@ -486,11 +480,6 @@ def save_times():
     file_w('{}/mem.txt'.format(LOC),'check_data[{}]'.format(str(check_data.time)),c-4)
     file_w('{}/mem.txt'.format(LOC),'check_dirs[{}]'.format(str(check_dirs.time)),c-3)
     file_w('{}/mem.txt'.format(LOC),'get_cfg[{}]'.format(str(get_cfg.time)),c-2)
-
-    if dbg:
-        data = [[str('{:08.6f}'.format(evaluate_paths.time))+'s','evaluate_paths'],[str('{:08.6f}'.format(prepare_array.time))+'s','prepare_array'],[str('{:08.6f}'.format(check_data.time))+'s','check_data'],[str('{:08.6f}'.format(check_dirs.time))+'s','check_dirs'], [str('{:08.6f}'.format(get_cfg.time))+'s','get_cfg']]
-        #data = [[str(evaluate_paths.time)+'s','evaluate_paths'],[str(prepare_array.time)+'s','prepare_array'],[str(check_data.time)+'s','check_data'],[str(check_dirs.time)+'s','check_dirs'], [str(get_cfg.time)+'s','get_cfg']]
-        menutxt+=draw_table(data, t_width, 0, 0.5, title='Boot Up Stats')
 
 #Sucht Matplotlib (installiert falls nicht Vorhanden)
 def find_matplot_python_hash():
@@ -1218,6 +1207,8 @@ def avail_pkg(id):
         pkg_info[id][2] = str(err)+FORM[1]+' errors'+FEND+')'
     return rlist
 
+
+"""
 #Prüft ob ein Pfad existiert 
 def check_path(pth):
     eval_path=shell('find '+pth)
@@ -1225,7 +1216,7 @@ def check_path(pth):
         return True
     else:       
         return False
-
+"""
 
         
 
@@ -1684,7 +1675,21 @@ def menu():
         elif opt == '2' or opt == 'Info':
             #Wir wollen auf jeden Fall auch die package Infos, selbst wenn refresh aus oder zu früh ist
             get_info = True
-            menutxt+=draw_table(best_list, t_width, 0, 0.5)
+            if dbg:    
+                data = [[str('{:08.6f}'.format(evaluate_paths.time))+' s','evaluate_paths'],[str('{:08.6f}'.format(prepare_array.time))+' s','prepare_array'],[str('{:08.6f}'.format(check_data.time))+' s','check_data'],[str('{:08.6f}'.format(check_dirs.time))+' s','check_dirs'], [str('{:08.6f}'.format(get_cfg.time))+' s','get_cfg']]            
+                menutxt+=draw_table(data, t_width, 0, 0.5, title='Boot Up Stats')
+                menutxt+='\n'
+            if info_feed:
+                data = shell(SPACK_XPTH+' arch')
+                if shell('if [[ -x {} ]]; then echo \'true\'; else echo \'false\'; fi'.format(SPACK_XPTH))!='false':
+                    data_pth = SPACK_XPTH[:-10]
+                    data_plt = shell(SPACK_XPTH+' arch')
+                    menutxt+=shell('if [[ -x {} ]]; then echo \'true\'; else echo \'false\'; fi'.format(SPACK_XPTH))
+                else:
+                    data_pth = FCOL[9]+'invalid!'+FEND
+                    data_plt = FCOL[9]+'invalid!'+FEND
+                menutxt+=FCOL[15]+'<info> '+FEND+'currently used spack dir:   '+data_pth+'\n'
+                menutxt+=FCOL[15]+'<info> '+FEND+'currently used platform:    '+data_plt+'\n'
             print_menu('')
         elif opt.isdigit() and int(opt)>2 and int(opt)<=len(BENCH_ID_LIST)+1:
             #-2 ist der Offset der die Positionen 'Option' und 'Info' ausgleicht
@@ -2000,6 +2005,128 @@ def get_mem_digit(pos):
     except Exception as exc:     
         error_log('') 
 """
+
+def check_spack_status():
+    global SPACK_XPTH
+    
+    #is there any path we're supposed to use?
+    SPACK_XPTH = str(file_r(BENCH_PTHS[MISC_ID]+'config.txt', 4)).rstrip()
+    test_list = str(shell('find ~ -executable -name spack -path \'*/spack/bin/*\'')).replace('\n',' ').split()
+    
+    for e in test_list:
+        e = e.strip()
+    alternatives = False
+
+    if len(test_list)>0:
+        alternatives = True
+
+    #there is but is that an actual spack-directory? 
+    #if os.path.isdir(SPACK_XPTH):
+    if SPACK_XPTH.isspace()==False:
+        
+        for e in test_list:
+            #is that our spack?
+            if e.find(SPACK_XPTH)!=-1:
+                #it is and therefore should be used
+                return True
+        
+        
+        print('\n')
+        
+        #our spack-path seems invalid, so we have to ask how to continue
+        if os.path.isdir(SPACK_XPTH)==False:
+            print(FCOL[6]+'<warning> '+FEND+'specified spack path seems to be invalid!')
+            print('          '+FCOL[6]+SPACK_XPTH+FEND+'\n')
+        else:
+            print(FCOL[6]+'<warning> '+FEND+'specified path doesn\'t correspond to an spack-installation!')
+            print('          '+FCOL[6]+SPACK_XPTH+FEND+'\n')
+            
+        if alternatives:
+            print(FCOL[15]+'<info>    '+FEND+'these possibly valid options were detected:')
+            for e in test_list:
+                print('          '+'[{}.] '.format(test_list.index(e)+1)+e)
+        else:
+            print('          '+'no alternatives were detected!')
+        
+        while True:
+            print(FCOL[15]+'\n- - - how to proceed? - - -'+FEND)
+            print('(1) ignore and proceed as usual with given path')
+            print('(2) install spack to the given location')
+            print('(3) terminate the process')
+            if alternatives:
+                print('(4) proceed with an alternative (will be saved to config!)')
+        
+            answer=input_format()
+        
+            if answer==str(1):
+                return True
+            elif answer==str(2):
+                install_spack(SPACK_XPTH)
+                return True
+            elif answer==str(3) or 'quit' or 'exit':
+                sys.exit(-1)
+            elif alternatives and answer==str(4):
+                print('which one? 1 <=> first one; up to '+len(test_list)+' options')
+                SPACK_XPTH = test_list[int(input_format())-1]
+                file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH,4)
+                return True
+            else:
+                print('\ninvalid input')
+        
+
+    #there isn't, so we have to ask how to continue
+    else:
+        print(FCOL[6]+'<warning> '+FEND+'there\'s no specified path for spack!\n')
+
+        if alternatives:
+            print(FCOL[15]+'<info>    '+FEND+'these possibly valid options were detected:')
+            for e in test_list:
+                print('          '+'[{}.] '.format(test_list.index(e)+1)+e)
+        else:
+            print('          '+'no alternatives were detected!')
+
+        while True:
+            print(FCOL[15]+'\n- - - how to proceed? - - -'+FEND)
+            print('(1) install spack to a specific location')
+            print('(2) terminate the process')
+            if alternatives:
+                print('(3) proceed with an alternative (will be saved to config!)')
+        
+            answer=input_format()
+            
+            if answer==str(1):
+                print('please specify the full path from home down to the binary (~/.../spack/bin/spack)')
+                print('sb.py was executed in: '+LOC)
+                install_spack(input_format)
+                return True
+            elif answer==str(2) or 'quit' or 'exit':
+                sys.exit(-1)
+            elif alternatives and answer==str(3):
+                print('which one? 1 <=> first one; up to '+len(test_list)+' options')
+                SPACK_XPTH = test_list[int(input_format())-1]
+                file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH,4)
+                return True
+            else:
+                print('\ninvalid input')
+
+def install_spack(pth):
+    global SPACK_XPTH
+    
+    #pth might point to the binary position
+    if pht[-15:]=='spack/bin/spack':
+        inst_pth=pht[:-16]
+    else:
+        inst_pth=pht
+        pht=pth+'/spack/bin/spack'
+    cmd='cd {}; git clone https://github.com/spack/spack '.format(inst_pth)
+    #shell(cmd)
+    SPACK_XPTH=pht 
+    #file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH,4)
+    print('mock-installing...\n'+cmd+'\ngoal: '+pht)
+    sys.exit(0)
+ 
+    #pull the repo
+    #print(shell(SPACK_XPTH+' arch'))
     
 #Startpunkt
 def main():
