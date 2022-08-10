@@ -1502,7 +1502,7 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
     return run_dir+'{}.sh'.format(num_workaround+shortened_name)
 
 def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output, res_dir):
-
+    
     """ 
     >>>>>   script building pipeline (4/5)           <<<<
     >>>>>   final design of the execution line       <<<<
@@ -1522,10 +1522,10 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output,
     elif bench_id==OSU_ID:
         txt+='mpirun -n {ncount} osu_{exargs}'.format(ncount=node_count,exargs=extra_args)
     elif bench_id==HPCG_ID:
-        #All results are automatically saved in the execution directory
-        txt+='cd {}'.format(res_dir)+'\n'
-        txt+='id0=$(mpirun -np {pcount} {bpath}xhpcg)\n'.format(pcount = proc_count, bpath = bin_reference, out=output)
-        txt+='srun -d afterany:${id0##* }'+' mv HPCG*.txt {}; mv hpcg*.txt {}/hpcg_meta@{}.txt'.format(output,output[:output.rfind('/')],output[output.rfind('/')+1:-4])
+        #All results are automatically saved in the execution directory        
+        txt+='cd {}'.format(res_dir[:res_dir.rfind('/')+1]+res_dir[res_dir.rfind('#')+1:])+'\n'
+        txt+='mpirun -np {pcount} {bpath}xhpcg; '.format(pcount = proc_count, bpath = bin_reference)
+        txt+='mv HPCG*.txt {}.txt; mv hpcg*.txt hpcg_meta@{}.txt'.format(output[output.rfind('/')+1:-4],output[output.rfind('/')+1:-4])
     
     return txt
 
