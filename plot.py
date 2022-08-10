@@ -9,70 +9,96 @@ import sys
 #                                                           #
 #  values =[[metadata][results]]                            #  
 #  [metadata] = [[titel][x-label][y-label]]                 #
-#  [results]  = [[profil_1],[profil_2],...,[profil_n]]      #
-#  [profil_result] = [[x1,...,xn],[y1,...,yn],...,[label]]  #
+#  [results]  = [[profile_1],[profile_2],...,[profile_n]]   #
+#  [profile_x] = [[aggregated values],[iterations]]         #
+#  [profile_result] = [[x1,...,xn],[y1,...,yn],...,[label]] #
 #                                                           #
 #############################################################
 
 
 #Der Timestemp muss ohne [] angegeben werden!
-timestemp=str(sys.argv[1])
-bench=str(sys.argv[2])
+TIMESTEMP=str(sys.argv[1])
+BENCH=str(sys.argv[2])
 
 #plot.py Path
-loc=str(os.path.dirname(os.path.abspath(__file__)))
+LOC=str(os.path.dirname(os.path.abspath(__file__)))
 
 #Pfad zum Speichern des Plots
-path=glob.glob('{}/projects/*'.format(loc)+timestemp+'*results*/*.out')[0]
-end=path.rfind(']')
-path=path[:end+1]
+#path=glob.glob('{}/projects/*'.format(LOC)+TIMESTEMP+'*results*/*.out')[0]
+#end=path.rfind(']')
+path='{}/projects/*'.format(LOC)+TIMESTEMP+'*results*/'
+values = [[],[]]
+label_token = True
 
 #Auslesen der Results
-def read_values(timestemp,bench):    
-    profiles = glob.glob('{}/projects/*'.format(loc)+timestemp+'*results*/*.out')
+def read_values(TIMESTEMP,BENCH):
+    profiles = glob.glob('{}/projects/*'.format(LOC)+'*res@'+TIMESTEMP+'/*/')
+    global values
     
-    if bench=='osu':
-        return read_osu(profiles)
-    
-    elif bench=='hpl':
-        return read_hpl(profiles)
+    if BENCH=='osu':
+        values[1].append([[[],[],[]],[]])        
+        for name in profiles:
+            read_osu(name)                       
+            name_=name[1:-1]
+            #Read function
+            with open('{}/projects/{}_run@{}/1#'.format(LOC,BENCH,TIMESTEMP)+name_[name_.rfind('/')+1:]+'.sh','r') as f:
+                aggregate_func=f.readlines()[2].split()[0]
+            
+            aggregated=aggregate_results(values[1][len(values[1])-1][1],aggregate_func)
+            values[1][len(values[1])-1][0][0]=aggregated[0]
+            values[1][len(values[1])-1][0][1]=aggregated[1]
+            
+    elif BENCH=='hpl':
+        for name in profiles:
+            read_hpl(name)
         
-    elif bench=='hpcg':
-        return read_hpcg(profiles)
+        
+    elif BENCH=='hpcg':
+        for name in profiles:
+            read_hpcg(name)    
+   
+    print(values)
+    return values
 
-
-def read_osu(profiles):
-    values = [[],[]]
-    for name in profiles:
+def read_osu(profile):
+    global values
+    global label_token
+    iter_res = glob.glob(profile+'*.out')    
+    
+    for name in iter_res:        
         if os.stat(name).st_size == 0:
             continue
-        values[1].append([[],[],[]])
+                
+        values[1][len(values[1])-1][1].append([[],[]])
         with open(name,'r') as f:
-            stringlist = f.readlines() 
-
-        #Auslesen MPI-Implementierung
-        with open('{}/configs/'.format(loc)+'osu/'+os.path.basename(name).replace('.out', '.txt'),'r') as f:
-            values[1][len(values[1])-1][2]='{} ({})'.format(f.readlines()[4].split()[0],name[name.rfind('/')+5:-4])
+            stringlist = f.readlines()         
             
         #Auslesen der Results
         for line in stringlist:
             #Abfangen leerer Zeile
             if len(line) == 0:
-                continue
-                
+                continue            
+            
+            #Auslesen MPI-Implementierung
+            if label_token ==True:
+                name_=profile[1:-1]
+                with open('{}/configs/'.format(LOC)+'osu'+name_[name_.rfind('/'):]+'.txt','r') as f:
+                    values[1][len(values[1])-1][0][2]='{} ({})'.format(f.readlines()[7].split()[0],name_[name_.rfind('/')+1:])
+            
             #Titel Auslesen
-            elif line.find('# OSU MPI ')!=-1:
-                values[0]=[line[line.find('# OSU MPI ')+10:-5]]
+            if line.find('# OSU MPI ')!=-1 and label_token==True:
+                values[0]=[line[line.find('# OSU MPI ')+10:-5]]                
                 
             #Achsen-Label Auslesen                
-            elif line.find('#') != -1:                    
-                values[0].extend([x.lstrip() for x in line[2:-1].split(' ',1)])                                     
+            elif line.find('#') != -1 and label_token==True:                    
+                values[0].extend([x.lstrip() for x in line[2:-1].split(' ',1)])
+                label_token=False                
                 
             #Ergebnisse Auslesen
             elif line[0].isdigit():                    
-                val = line.replace(' ',',',1).replace(' ','').split(',')
-                values[1][len(values[1])-1][0].append(float(val[0]))
-                values[1][len(values[1])-1][1].append(float(val[1].replace('\n','')))
+                val = line.replace(' ',',',1).replace(' ','').split(',')                
+                values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(val[0]))
+                values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][1].append(float(val[1].replace('\n','')))
 
     return values
 
@@ -140,26 +166,26 @@ def read_hpcg(profiles):
     return values
 
 #Plotten der Results
-def run_plot(timestemp,bench):
-    values = read_values(timestemp,bench)
+def run_plot(TIMESTEMP,BENCH):
+    values = read_values(TIMESTEMP,BENCH)
     fig, ax = plt.subplots()    
     labels=['']
     
     #Neu sortieren der Results für Balkendiagramme
-    if len(values[1][0][0])==1:
-        values[1]=sorted(values[1].copy(), key=lambda row: (row[1]))   
+    if len(values[1][0][0][0])==1:
+        values[1]=sorted(values[1].copy(), key=lambda row: (row[1]))
     
 
     for v in values[1]:
         #Graphen
-        if len(v[0])>1:
-            plt.plot(v[0],v[1],label=v[2])
+        if len(v[0][0][0])>1:
+            plt.plot(v[0][0],v[0][1],label=v[0][2])
             plt.legend()
             plt.grid(color='b', alpha=0.5, linestyle='dashed', linewidth=0.5)
         
         #Balkendiagramme
         else:                       
-            plt.barh(v[2],v[1],label=v[2])
+            plt.barh(v[0][2],v[0][1],label=v[0][2])
             fig.set_figwidth(10)     
  
     plt.title(values[0][0])
@@ -171,24 +197,27 @@ def run_plot(timestemp,bench):
     plt.savefig(path+'/'+'plot.png')
 
 
+
 #Skalieren der Achsen   
 def ax_scale():
-    if bench == 'osu':
+    if BENCH == 'osu':
         plt.xscale('log', base=2)
         plt.yscale('log')
     
-    elif bench == 'hpl':
+    elif BENCH == 'hpl':
         plt.xscale('log',base=10)
         
-    elif bench == 'hpcg':
+    elif BENCH == 'hpcg':
         plt.xscale('log',base=10)
 
+def aggregate_results(list, function):
+    return list[0]
     
 #Debugfunktion zum printen jedes Tripels (x,y,label)
 def plot_list():
-    values = read_values(timestemp,bench)
+    values = read_values(TIMESTEMP,BENCH)
     for val in values[1]:
         print(val)
    
 #plot_list()
-run_plot(timestemp,bench)
+run_plot(TIMESTEMP,BENCH)
