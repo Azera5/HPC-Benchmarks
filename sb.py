@@ -1306,7 +1306,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
                 menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
                 return '-1'
             error_log('profile: '+selected_profiles[i][0][0]+' was deselected! (no path known)'+'\n'+res, locals())
-            menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+problem+FEND
+            menutxt+='\n'+FCOL[6]+'<warning> '+FEND+'profile: '+FCOL[6]+selected_profiles[i][0][0]+FEND+' was deselected! (no path known)'+'\n'+FCOL[6]+res+FEND
             dlist.append(i)
             unavail_names.append(selected_profiles[i][0][0])
     dlist.reverse()
