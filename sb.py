@@ -94,7 +94,6 @@ FORM_M = [ '\33[1m', '\33[3m', '\33[4m', '\33[7m', '\33[5m', '\33[6m' ]
 #stop formatting
 FEND = '\33[0m'
 
-
 """
 Command-Line-Parameter
 """
@@ -132,7 +131,6 @@ def cl_arg():
     FCOL[7]+'key difference: '+FEND+'creates *non-persistent* dummy projects and prints the error stack!\n'+
     FCOL[2]+'     e.g.: -t hpl 1,3-4,Test1\n'+
     '           etc.\n\n'+FEND+
-    FCOL[15]+'<info>    '+FEND+'clean up is »rm -r ...«-based respective to sub-directories named like »*@*[dummy]«,\n'+
     'please be cautious with naming data in the project directory this way\n\n')
     
     parser.add_argument('-p','--profiles',nargs=1,type=str,help=''+
@@ -153,8 +151,6 @@ def cl_arg():
     '     '+FCOL[2]+'e.g.: -c projects\n'+
     '           -c all\n'+FEND+
     FCOL[15]+'<info>    '+FEND+'please consider saving relevant project results beforehand\n')
-    
-    
     args= parser.parse_args()
     
     #Clean files
@@ -269,8 +265,8 @@ def evaluate_paths():
         else:
             pth = LOC+'/configs/{}/'.format(tag_id_switcher(id))
         BENCH_PTHS[id]=pth
-        #loadprogress('')
-    
+        #loadprogress()
+        
     evaluate_paths_t=time.time()-timestart
 
 #no timestats because of the integration into path evaluation
@@ -294,8 +290,7 @@ def extensive_spack_evaluation():
         alternatives = True
 
     #there is a path but is that an actual spack-directory? 
-    if len(SPACK_XPTH)>0 and SPACK_XPTH.isspace()!=True:          
-        
+    if len(SPACK_XPTH)>0 and SPACK_XPTH.isspace()!=True:        
         for e in test_list:
             #is that our spack?
             if e.find(SPACK_XPTH)!=-1 and check_is_dir(SPACK_XPTH)==False:
@@ -654,6 +649,7 @@ def error_log(txt='', local_table={}, exc_info=''):
                     
                     if len(str(_[0]))+len('['+str(i)+'.] ')>maxlength:
                         maxlength = len(str(_[0]))+len('['+str(i)+'.] ')
+
                 
                 for n in range(len(local_scale)):
                     local_scale[n] = (maxlength//8)-local_scale[n]
@@ -1316,6 +1312,7 @@ def avail_pkg(id):
             pkg_info[id][1] = ''
             pkg_info[id][2] = ''
             return rlist
+
         if avl==full:
             pkg_info[id][0] = FCOL[5]+str(avl)+FEND+'/'+str(full)+FORM[1]+' avl. '+FEND
         elif avl!=0:
@@ -1631,8 +1628,7 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output,
         #All results are automatically saved in the execution directory        
         txt+='cd {}'.format(res_dir[:res_dir.rfind('/')+1]+res_dir[res_dir.rfind('#')+1:])+'\n'
         txt+='mpirun -np {pcount} {bpath}xhpcg; '.format(pcount = proc_count, bpath = bin_reference)
-        txt+='mv HPCG*.txt {}.txt; mv hpcg*.txt hpcg_meta@{}.txt'.format(output[output.rfind('/')+1:-4],output[output.rfind('/')+1:-4])
-    
+        txt+='mv HPCG*.txt {}.out; mv hpcg*T*.txt hpcg_meta@{}.txt'.format(output[output.rfind('/')+1:-4],output[output.rfind('/')+1:-4])
     return txt
 
 def build_plot(t_id, bench,run_dir):
@@ -2286,9 +2282,6 @@ def get_mem_digit(pos):
         error_log('') 
 """
         
-
-
-
 """
 Main Initialization
 """
