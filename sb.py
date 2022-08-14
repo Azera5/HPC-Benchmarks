@@ -1525,7 +1525,7 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output,
         #All results are automatically saved in the execution directory        
         txt+='cd {}'.format(res_dir[:res_dir.rfind('/')+1]+res_dir[res_dir.rfind('#')+1:])+'\n'
         txt+='mpirun -np {pcount} {bpath}xhpcg; '.format(pcount = proc_count, bpath = bin_reference)
-        txt+='mv HPCG*.txt {}.txt; mv hpcg*.txt hpcg_meta@{}.txt'.format(output[output.rfind('/')+1:-4],output[output.rfind('/')+1:-4])
+        txt+='mv HPCG*.txt {}.out; mv hpcg*T*.txt hpcg_meta@{}.txt'.format(output[output.rfind('/')+1:-4],output[output.rfind('/')+1:-4])
     
     return txt
 
