@@ -11,7 +11,7 @@ import sys
 #  [metadata] = [[titel][x-label][y-label]]                 #
 #  [results]  = [[profile_1],[profile_2],...,[profile_n]]   #
 #  [profile_x] = [[aggregated values],[iterations]]         #
-#  [profile_result] = [[x1,...,xn],[y1,...,yn],...,[label]] #
+#  [profile_result] = [[x1,...,xn],[y1,...,yn],...,label] #
 #                                                           #
 #############################################################
 
@@ -37,18 +37,19 @@ def read_values(TIMESTEMP,BENCH):
     profiles = glob.glob('{}/projects/*'.format(LOC)+'*res@'+TIMESTEMP+'/*/')
     global values
     global append_count
+    global label_token
     
     for name in profiles:    
         if BENCH=='osu':
-            values[1].append([[[],[],[]],[]])  
-            read_osu(name)
+            #values[1].append([[[],[],[]],[]])  
+            read_osu(name,profiles.index(name))
 
         elif BENCH=='hpl':            
             #Meta-labels
             if label_token==True:
                 values[0]=['HPL Benchmark','Gflops','']  
                 
-            read_hpl(name)
+            read_hpl(name,profiles.index(name))
             
         
         elif BENCH=='hpcg':
@@ -56,8 +57,8 @@ def read_values(TIMESTEMP,BENCH):
             if label_token==True:
                 values[0]=['HPCG Benchmark','Gflops','']        
             
-            values[1].append([[[],[],[]],[]])
-            read_hpcg(name)    
+            #values[1].append([[[],[],[]],[]])
+            read_hpcg(name,profiles.index(name))    
 
         #reads function to aggregate the data
         aggregate_func=read_aggregate_func(name[1:-1])
@@ -68,13 +69,14 @@ def read_values(TIMESTEMP,BENCH):
         if append_count>0:
             values[1][len(values[1])-1][0][0]=aggregated[0]
             values[1][len(values[1])-1][0][1]=aggregated[1]
-            values[1][len(values[1])-1][0][2]+=' [{}#{}]'.format(aggregate_func,len(values[1][len(values[1])-1][1]))
-            append_count=0     
-    
-    
+            values[1][len(values[1])-1][0][2]='({}) [{}#{}]\n{}'.format(name[name.rfind(TIMESTEMP+'/')+len(TIMESTEMP)+1:-1],aggregate_func,len(values[1][len(values[1])-1][1]),values[1][len(values[1])-1][0][2])
+            append_count=0    
+        
+        label_token=True    
+  
     return values
 
-def read_osu(profile):
+def read_osu(profile,index):
     global values
     global label_token
     global append_count
@@ -100,7 +102,7 @@ def read_osu(profile):
             
             #Auslesen MPI-Implementierung            
             name_=profile[1:-1]
-            with open('{}/configs/'.format(LOC)+'osu'+name_[name_.rfind('/'):]+'.txt','r') as f:
+            with open('{}/configs/'.format(LOC)+BENCH+name_[name_.rfind('/'):]+'.txt','r') as f:
                 values[1][len(values[1])-1][0][2]='{} ({})'.format(f.readlines()[7].split()[0],name_[name_.rfind('/')+1:])
             
             #Titel Auslesen
@@ -120,7 +122,7 @@ def read_osu(profile):
     
     return values
 
-def read_hpl(profile):
+def read_hpl(profile,index):
     global values# = [[],[]]
     global label_token
     global append_count
@@ -139,62 +141,57 @@ def read_hpl(profile):
         with open(name,'r') as f:
             stringlist = f.readlines() 
         
-        #Profilmerkmale (N,P,Q)        
-        values[1][len(values[1])-1][0][2]='N {}\nP{}; Q{} ({})'.format(stringlist[18].split()[2],stringlist[21].split()[2],stringlist[22].split()[2],name[name.rfind('/')+5:-4])                        
-        label_token=False
+        #Profilmerkmale (N,P,Q)
+        if label_token==True:
+            values[1][len(values[1])-1][0][2]='N {}\nP{}; Q{} ({})'.format(stringlist[18].split()[2],stringlist[21].split()[2],stringlist[22].split()[2],name[name.rfind('#')+1:-4])                        
+            label_token=False
         
         #Results
         val=float(stringlist[46].split()[6].replace('.',''))
-        values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(iter_res.index(name)))
+        values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(index))
         values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][1].append(val)
        
     return values 
 
-def read_hpcg(profile):
+def read_hpcg(profile,index):
     global values
     global label_token
+    global append_count
     iter_res = glob.glob(profile+'*.out')
-    nodes='?'
-    cpus_per_task='?'
+    
+    
     for name in iter_res:       
         if os.stat(name).st_size == 0:
             continue
         
-        if append_count==True:
-            values[1].append([[[],[],[]],[]])
-            append_count=False     
+        if append_count==0:
+            values[1].append([[[],[],[]],[]])            
+            append_count+=1     
         
-        values[1].append([[],[]])
+        values[1][len(values[1])-1][1].append([[],[]])
         
         with open(name,'r') as f:
             stringlist = f.readlines() 
-        
-        #reads number of nodes and cpus-per-task from slurm script
-        with open(name.replace('res','run').replace('.out','.sh')) as f:
-            for line_index, line in enumerate(f):
-                if '--nodes=' in line:
-                    nodes=line.split('=')[1][:-1]                    
-                
-                elif '-N ' in line:
-                    nodes=line.split()[1][:-1]
-                
-                elif '--cpus-per-task=' in line:
-                    cpus_per_task=line.split('=')[1][:-1]
-                
-                elif '-c ' in line:
-                    cpus_per_task=line.split()[1][:-1]
-                    
-        #Profilmerkmale Number of processes, threads and nodes, cpus_per_task      
-        if label_token==True:   
-            values[1][len(values[1])-1][0][2]='proc {}; thread {}\nnodes: {}, cpus: {}\n ({})'.format(stringlist[4].split('=')[1][:-1],stringlist[5].split('=')[1][:-1],nodes,cpus_per_task,name[name.rfind('/')+6:-4])                        
+                            
+        #Profilmerkmale number of processes, threads per processe, problem size; Slurm: nodes, cpus_per_task      
+        if label_token==True:            
+            problem_size='?'
+            
+            slurm_param = read_slurm_param(name)
+            #readas problem size from profil_cfg
+            name_=profile[1:-1]
+            with open('{}/configs/'.format(LOC)+BENCH+name_[name_.rfind('/'):]+'.txt','r') as f:
+                _=f.readlines()[12].split()
+                problem_size='{} {} {}'.format(_[0],_[1],_[2])
+            
+            values[1][len(values[1])-1][0][2]='size {}; processes {}; threads per proc. {};\nSlurm: nodes {}; cpus per task: {}'.format(problem_size,stringlist[4].split('=')[1][:-1],stringlist[5].split('=')[1][:-1],slurm_param[0],slurm_param[1])                        
             label_token=False
         
         #Results
-        val=float(stringlist[118].split('=')[1])
-        values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(profile.index(name)))
-        values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][1].append(val) 
+        val=float(stringlist[118].split('=')[1])        
+        values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(index))
+        values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][1].append(val)
     
-    append_count=True
     return values
 
 def read_aggregate_func(profile):
@@ -207,6 +204,7 @@ def read_aggregate_func(profile):
 
 def aggregate_results(list, func):
     _=[]
+    
     if func=='avg':        
         _=np.average(list,axis=0)
         
@@ -214,46 +212,60 @@ def aggregate_results(list, func):
         _=np.amax(list,axis=0)
     
     elif func=='min':
-        _= np.amin(list,axis=0)
-        
+        _= np.amin(list,axis=0)    
+    
     return _.tolist()
 
-#Plotten der Results
+def read_slurm_param(name):
+    nodes='?'
+    cpus_per_task='?'
+    #reads number of nodes and cpus-per-task from slurm script            
+    with open(name[:name.find(TIMESTEMP+'/')+len(TIMESTEMP)].replace('res','run')+name[name.rfind('/'):].replace('.out','.sh')) as f:
+        for line_index, line in enumerate(f):
+            if '--nodes=' in line:
+                nodes=line.split('=')[1][:-1]                    
+                
+            elif '-N ' in line:
+                nodes=line.split()[1][:-1]
+                
+            elif '--cpus-per-task=' in line:
+                cpus_per_task=line.split('=')[1][:-1]
+                
+            elif '-c ' in line:
+                cpus_per_task=line.split()[1][:-1]
+    return [nodes,cpus_per_task]
+
+#plots the results
 def run_plot(TIMESTEMP,BENCH):
     values = read_values(TIMESTEMP,BENCH)
     fig, ax = plt.subplots()    
     labels=['']
+    fig_typ=''
     
-    #Neu sortieren der Results für Balkendiagramme
-    """
+    #reorder of results for bar charts   
     if len(values[1][0][0][0])==1:
-        values[1]=sorted(values[1].copy(), key=lambda row: (row[1]))
-    """
-
+        values[1]=sorted(values[1].copy(), key=lambda row: (row[0][1]))
+        fig_typ='barh'
+    
+    
     for v in values[1]:
-        #Graphen        
+        #function graphs        
         if len(v[0][0])>1:            
             plt.plot(v[0][0],v[0][1],label=v[0][2])
-            plt.legend()
-            plt.grid(color='b', alpha=0.5, linestyle='dashed', linewidth=0.5)
-        
-        #Balkendiagramme
+            
+        #horizontal bar chart
         else:
             plt.barh(v[0][2],v[0][1],label=v[0][2])
-            plt.legend()
-            fig.set_figwidth(10)     
- 
-    plt.title(values[0][0])
-    plt.xlabel(values[0][1])
-    plt.ylabel(values[0][2])        
-
+            
+            
+            
+    #formats the figure layout (size, legend, position etc.)       
+    fig_layout(fig,ax,fig_typ)
     ax_scale()
     
     plt.savefig('{}plot.png'.format(path))
 
 
-
-#Skalieren der Achsen   
 def ax_scale():
     if BENCH == 'osu':
         plt.xscale('log', base=2)
@@ -265,12 +277,34 @@ def ax_scale():
     elif BENCH == 'hpcg':
         plt.xscale('log',base=10)
 
+#Formats the figure layout
+def fig_layout(fig, ax, fig_typ):
+    if fig_typ=='barh':
+        fig.set_figwidth(13)
+        fig.set_figheight(5+0.2*len(values[1]))   
+        fig.subplots_adjust(left=0.1,right=0.65)
 
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles[::-1], labels[::-1],loc='upper left', bbox_to_anchor=(1, 1), fancybox=True, shadow=True, ncol=1)
+               
+        plt.yticks(ticks=range(0,len(values[1])),labels=[_[0][2][1:_[0][2].find(')')] for _ in values[1]])        
     
-#Debugfunktion zum printen jedes Tripels (x,y,label)
+    
+    plt.legend()
+    plt.grid(color='b', alpha=0.5, linestyle='dashed', linewidth=0.5)
+    
+    plt.title(values[0][0])
+    plt.xlabel(values[0][1])
+    plt.ylabel(values[0][2]) 
+    
+#Debugfunction will be print each triple (x,y,label)
 def plot_list():
     for val in values[1]:
         print(val[0])
-   
-#plot_list()
-run_plot(TIMESTEMP,BENCH)
+
+def main():   
+    #plot_list()
+    run_plot(TIMESTEMP,BENCH)
+    
+if __name__ == "__main__":
+    main()
