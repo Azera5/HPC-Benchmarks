@@ -280,6 +280,13 @@ def extensive_spack_evaluation():
     
     test_list = str(shell('find {} -executable -name spack -path \'*/spack/bin/*\''.format(SPACK_SEARCH_ROOT))).replace('\n',' ').split()
     
+    git_loc = shell('whereis git').split('git:')[1]
+    if (git_loc.isspace==True or len(git_loc)<2):
+        git_warning = FCOL[9]+' unavailable!*'+FEND
+    else:
+        git_warning = ''
+    
+    
     for e in test_list:
         e = e.strip()
     alternatives = False
@@ -307,8 +314,11 @@ def extensive_spack_evaluation():
         print('\n')
         
         #our spack-path seems invalid, so we have to ask how to continue
-        print(FCOL[6]+'\n\n<warning> '+FEND+'specified path doesn\'t correspond to an spack-installation!')
+        print(FCOL[6]+'\n<warning> '+FEND+'specified path doesn\'t correspond to a spack-installation!')
         print('          '+FCOL[6]+SPACK_XPTH+FEND+'\n')
+            
+        if git_warning!='':
+            print(FCOL[6]+'<warning> '+FEND+'»whereis git« returns no path: installation unavailable!'+FCOL[9]+'*'+FEND+'\n')
             
         if alternatives:
             print(FCOL[15]+'<info>    '+FEND+'these possibly valid options were detected:')
@@ -316,12 +326,12 @@ def extensive_spack_evaluation():
                 print('          '+FCOL[15]+'[{}.] '.format(test_list.index(e)+1)+FEND+e)
             print('          '+FCOL[7]+'search mode:'+FCOL[2]+' {}'.format(search_mode)+FEND)
         else:
-            print(FCOL[7]+'<info>    '+FEND+'no alternatives were detected! ({})'.format(search_mode))
+            print(FCOL[7]+'<info>    '+FEND+'no alternatives were detected! ({})'.format(search_mode))                
         
         while True:
             print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
             print('(1) ignore and proceed as usual with given path')
-            print('(2) install spack to the given location')
+            print('(2) install spack to the given location'+git_warning)
             print('(3) terminate')
             if alternatives:
                 print('(4) proceed with an alternative '+FORM[0]+'(will be saved to config!)'+FEND)
@@ -349,7 +359,10 @@ def extensive_spack_evaluation():
                
     #there is no path specified, so we have to ask how to continue
     else:
-        print(FCOL[6]+'\n\n<warning> '+FEND+'there\'s no specified path for spack!\n')
+        print(FCOL[6]+'\n<warning> '+FEND+'there\'s no specified path for spack!\n')
+
+        if git_warning!='':
+            print(FCOL[6]+'<warning> '+FEND+'»whereis git« returns no path: installation unavailable!'+FCOL[9]+'*'+FEND+'\n')
 
         if alternatives:
             print(FCOL[15]+'<info>    '+FEND+'these possibly valid options were detected:')
@@ -361,7 +374,7 @@ def extensive_spack_evaluation():
 
         while True:
             print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
-            print('(1) install spack to a specific location')
+            print('(1) install spack to a specific location'+git_warning)
             print('(2) terminate')
             if alternatives:
                 print('(3) proceed with an alternative '+FORM[0]+'(will be saved to config!)'+FEND)
@@ -399,12 +412,14 @@ def check_python():
     
     if len(py)==0:        
          while True:
-            print(FCOL[6]+'\n\n<warning> '+FEND+'In the current spack was no python package found.\n          It is necessary for plotting the results (matplotlib installation)!')
+            print(FCOL[6]+'\n\n<warning> '+FEND+'can\'t find a python package in current spack location!\n          it\'s easy to set up '+FORM[0]+'»matplotlib«'+FEND+' for such a package\n          '+FORM[0]+'»matplotlib«'+FEND+' is a '+FORM[2]+'must have'+FEND+' for plotting!')
             print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
             print('(1) install python to the current spack')
-            print('(2) ignore and proceed (maybe plotting doesn\'t work)')
-            print('(3) ignore and proceed, don\'t ask again (maybe plotting doesn\'t work)')
+            print('(2) ignore and proceed'+FCOL[6]+'*'+FEND)
+            print('(3) ignore and proceed, don\'t ask again'+FCOL[6]+'*'+FEND)
             print('(4) terminate')
+            print('')
+            print(FCOL[6]+'might cause trouble for plotting!*'+FEND)
            
             answer=input_format()
             
@@ -426,7 +441,7 @@ def check_python():
                 return
             elif answer==str(3):
                 menutxt+='\n'
-                menutxt+=(FCOL[15]+'<info>    '+FEND+'Python check disabled! Can be changed in settings or mem.txt')
+                menutxt+=(FCOL[15]+'<info>    '+FEND+'python check disabled! can be changed in settings or mem.txt')
                 if int(get_mem_digit(10))==1:
                     mode_switch('check_python_setting', 0)
                     file_w('{}/mem.txt'.format(LOC),'check_python_setting\t\t\t[0]',10)
@@ -949,26 +964,28 @@ def normalise_config(name, scale=0, blocks=5, tabs=False, tabsize=8):
     
 def install_spack(pth):
     global SPACK_XPTH, menutxt
-    
-    if len(pth)>15:
-        #pth might point to the binary position
-        if pth[-15:]=='spack/bin/spack':
-            inst_pth=pth[:-16]
+    if shell('whereis git').split('git:')[1].isspace==False:
+        if len(pth)>15:
+            #pth might point to the binary position
+            if pth[-15:]=='spack/bin/spack':
+                inst_pth=pth[:-16]
+            else:
+                inst_pth=pth
+                pth=pth+'/spack/bin/spack'
         else:
             inst_pth=pth
-            pth=pth+'/spack/bin/spack'
+        if check_is_dir(inst_pth)==False:
+            cmd_ = 'mkdir {};'.format(inst_pth)
+        else:
+            cmd_ = ''
+        #set -e is supposed to prevent an installment if we're in the wrong place
+        cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd_, inst_pth)
+        shell(cmd)
+        SPACK_XPTH=pth 
+        file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
+        menutxt+=FCOL[15]+'\n<info>    '+FEND+'spack was installed to following location:'+'\n          '+FCOL[15]+inst_pth+FEND
     else:
-        inst_pth=pth
-    if check_is_dir(inst_pth)==False:
-        cmd_ = 'mkdir {};'.format(inst_pth)
-    else:
-        cmd_ = ''
-    #set -e is supposed to prevent an installment if we're in the wrong place
-    cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd_, inst_pth)
-    shell(cmd)
-    SPACK_XPTH=pth 
-    file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
-    menutxt+=FCOL[15]+'\n<info>    '+FEND+'spack was installed to following location:'+'\n          '+FCOL[15]+inst_pth+FEND
+        menutxt+=FCOL[15]+'\n<warning> '+FEND+'spack installation failed! (git clone ...)'+'\n          '+FCOL[15]+'reason: git location unkown!'+FEND
 
 def spack_errorcheck():
     global menutxt, spack_problem
@@ -1543,7 +1560,11 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
         for name in unselected_names:
             menutxt+=FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
         for name in unavail_names:
-            menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'   
+            menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'
+        for arg_name in farg:
+            full_name = tag_id_switcher(id)+'_cfg_'+arg_name+'.txt'
+            if full_name not in avail_names:
+                menutxt+=FCOL[6]+full_name+ml+'(does not exist)'+FEND+'\n'
     
     #Skriptbau, ggf. mit zusätzlichen Argumenten
     if extra_args!='':
@@ -1867,11 +1888,8 @@ def install_spec(expr):
     #run script    
     if os.path.isfile('{}/install.sh'.format(LOC))==True:
         
-        #original:
-        #return shell('chmod +x {}/install.sh ; sbatch {}/install.sh'.format(LOC,LOC))
-        #test:
-        menutxt+='chmod +x {}/install.sh ; sbatch {}/install.sh'.format(LOC,LOC)
-        
+        return shell('chmod +x {}/install.sh ; sbatch {}/install.sh'.format(LOC,LOC))
+
     #Return script path or some informations
     else:
         menutxt+=FCOL[6]+'\n    there is nothing to install'+FEND+'\n'
