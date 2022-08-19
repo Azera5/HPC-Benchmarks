@@ -281,6 +281,13 @@ def extensive_spack_evaluation():
     
     test_list = str(shell('find {} -executable -name spack -path \'*/spack/bin/*\''.format(SPACK_SEARCH_ROOT))).replace('\n',' ').split()
     
+    git_loc = shell('whereis git').split('git:')[1]
+    if (git_loc.isspace==True or len(git_loc)<2):
+        git_warning = FCOL[9]+' unavailable!*'+FEND
+    else:
+        git_warning = ''
+    
+    
     for e in test_list:
         e = e.strip()
     alternatives = False
@@ -308,8 +315,11 @@ def extensive_spack_evaluation():
         print('\n')
         
         #our spack-path seems invalid, so we have to ask how to continue
-        print(FCOL[6]+'\n\n<warning> '+FEND+'specified path doesn\'t correspond to an spack-installation!')
+        print(FCOL[6]+'\n<warning> '+FEND+'specified path doesn\'t correspond to a spack-installation!')
         print('          '+FCOL[6]+SPACK_XPTH+FEND+'\n')
+            
+        if git_warning!='':
+            print(FCOL[6]+'<warning> '+FEND+'»whereis git« returns no path: installation unavailable!'+FCOL[9]+'*'+FEND+'\n')
             
         if alternatives:
             print(FCOL[15]+'<info>    '+FEND+'these possibly valid options were detected:')
@@ -317,12 +327,12 @@ def extensive_spack_evaluation():
                 print('          '+FCOL[15]+'[{}.] '.format(test_list.index(e)+1)+FEND+e)
             print('          '+FCOL[7]+'search mode:'+FCOL[2]+' {}'.format(search_mode)+FEND)
         else:
-            print('          '+'no alternatives were detected! ({})'.format(search_mode))
+            print(FCOL[7]+'<info>    '+FEND+'no alternatives were detected! ({})'.format(search_mode))                
         
         while True:
             print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
             print('(1) ignore and proceed as usual with given path')
-            print('(2) install spack to the given location')
+            print('(2) install spack to the given location'+git_warning)
             print('(3) terminate')
             if alternatives:
                 print('(4) proceed with an alternative '+FORM[0]+'(will be saved to config!)'+FEND)
@@ -350,7 +360,10 @@ def extensive_spack_evaluation():
                
     #there is no path specified, so we have to ask how to continue
     else:
-        print(FCOL[6]+'\n\n<warning> '+FEND+'there\'s no specified path for spack!\n')
+        print(FCOL[6]+'\n<warning> '+FEND+'there\'s no specified path for spack!\n')
+
+        if git_warning!='':
+            print(FCOL[6]+'<warning> '+FEND+'»whereis git« returns no path: installation unavailable!'+FCOL[9]+'*'+FEND+'\n')
 
         if alternatives:
             print(FCOL[15]+'<info>    '+FEND+'these possibly valid options were detected:')
@@ -358,11 +371,11 @@ def extensive_spack_evaluation():
                 print('          '+FCOL[15]+'[{}.] '.format(test_list.index(e)+1)+FEND+e)
             print('          '+FCOL[7]+'search mode:'+FCOL[2]+' {}'.format(search_mode)+FEND)
         else:
-            print('          '+'no alternatives were detected! ({})'.format(search_mode))
+            print(FCOL[7]+'<info>    '+FEND+'no alternatives were detected! ({})'.format(search_mode))
 
         while True:
             print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
-            print('(1) install spack to a specific location')
+            print('(1) install spack to a specific location'+git_warning)
             print('(2) terminate')
             if alternatives:
                 print('(3) proceed with an alternative '+FORM[0]+'(will be saved to config!)'+FEND)
@@ -400,12 +413,14 @@ def check_python():
     
     if len(py)==0:        
          while True:
-            print(FCOL[6]+'\n\n<warning> '+FEND+'In the current spack was no python package found.\n          It is necessary for plotting the results (matplotlib installation)!')
+            print(FCOL[6]+'\n\n<warning> '+FEND+'can\'t find a python package in current spack location!\n          it\'s easy to set up '+FORM[0]+'»matplotlib«'+FEND+' for such a package\n          '+FORM[0]+'»matplotlib«'+FEND+' is a '+FORM[2]+'must have'+FEND+' for plotting!')
             print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
             print('(1) install python to the current spack')
-            print('(2) ignore and proceed (maybe plotting doesn\'t work)')
-            print('(3) ignore and proceed, don\'t ask again (maybe plotting doesn\'t work)')
+            print('(2) ignore and proceed'+FCOL[6]+'*'+FEND)
+            print('(3) ignore and proceed, don\'t ask again'+FCOL[6]+'*'+FEND)
             print('(4) terminate')
+            print('')
+            print(FCOL[6]+'might cause trouble for plotting!*'+FEND)
            
             answer=input_format()
             
@@ -427,7 +442,7 @@ def check_python():
                 return
             elif answer==str(3):
                 menutxt+='\n'
-                menutxt+=(FCOL[15]+'<info>    '+FEND+'Python check disabled! Can be changed in settings or mem.txt')
+                menutxt+=(FCOL[15]+'<info>    '+FEND+'python check disabled! can be changed in settings or mem.txt')
                 if int(get_mem_digit(10))==1:
                     mode_switch('check_python_setting', 0)
                     file_w('{}/mem.txt'.format(LOC),'check_python_setting\t\t\t[0]',10)
@@ -552,7 +567,7 @@ def get_cfg(bench,farg='all'):
                 sublist.append(config_cut(ln))
                 if block==2:
                     spec_.append(ln)
-            #a found parting line implies that we're ready to append the finished block
+            #a parting line implies that we're ready to append the finished block
             elif (len(sublist)>0) and (ln.find('---')>-1):                
                 cfg_profiles[id][names.index(p)].append(sublist)                
                 block+=1
@@ -563,14 +578,12 @@ def get_cfg(bench,farg='all'):
                 continue                   
         #normal profiles need additional metadata
         if id != MISC_ID:
-            #normalises whiespaces in the config 
+            #normalises whitespaces in the config 
             if auto_space_normalization:                
                 normalise_config(get_cfg_path(bench)+p,blocks=block+1)
             spec = get_spec(spec_,bench)
             cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]
-        
-
-        
+       
         sublist, spec_, spec = [], [], ''       
               
         #small illustration of loadprogress
@@ -952,26 +965,28 @@ def normalise_config(name, scale=0, blocks=5, tabs=False, tabsize=8):
     
 def install_spack(pth):
     global SPACK_XPTH, menutxt
-    
-    if len(pth)>15:
-        #pth might point to the binary position
-        if pth[-15:]=='spack/bin/spack':
-            inst_pth=pth[:-16]
+    if shell('whereis git').split('git:')[1].isspace==False:
+        if len(pth)>15:
+            #pth might point to the binary position
+            if pth[-15:]=='spack/bin/spack':
+                inst_pth=pth[:-16]
+            else:
+                inst_pth=pth
+                pth=pth+'/spack/bin/spack'
         else:
             inst_pth=pth
-            pth=pth+'/spack/bin/spack'
+        if check_is_dir(inst_pth)==False:
+            cmd_ = 'mkdir {};'.format(inst_pth)
+        else:
+            cmd_ = ''
+        #set -e is supposed to prevent an installment if we're in the wrong place
+        cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd_, inst_pth)
+        shell(cmd)
+        SPACK_XPTH=pth 
+        file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
+        menutxt+=FCOL[15]+'\n<info>    '+FEND+'spack was installed to following location:'+'\n          '+FCOL[15]+inst_pth+FEND
     else:
-        inst_pth=pth
-    if check_is_dir(inst_pth)==False:
-        cmd_ = 'mkdir {};'.format(inst_pth)
-    else:
-        cmd_ = ''
-    #set -e is supposed to prevent an installment if we're in the wrong place
-    cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd_, inst_pth)
-    shell(cmd)
-    SPACK_XPTH=pth 
-    file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
-    menutxt+=FCOL[15]+'\n<info>    '+FEND+'spack was installed to following location:'+'\n          '+FCOL[15]+inst_pth+FEND
+        menutxt+=FCOL[15]+'\n<warning> '+FEND+'spack installation failed! (git clone ...)'+'\n          '+FCOL[15]+'reason: git location unkown!'+FEND
 
 def spack_errorcheck():
     global menutxt, spack_problem
@@ -1029,20 +1044,31 @@ def get_cfg_names(pth, typ):
 
 #Bekommt eine Liste bzgl. der Packages aus einer Config, liefert die package spec
 def get_spec(cfg_list,bench):
+    block=False
     if bench == 'osu':
         bench='osu-micro-benchmarks'
     spec = bench    
     for _ in cfg_list:      
         _ = _.split('[')
-        if len(_[0]) > 0:
-            _[0]=_[0].rstrip()            
-            if _[1].find('Version')!=-1:
-                spec = spec+'@'
-            elif _[1].find('Compiler')!=-1:
-                spec = spec+'%'
+        further_package_specification = _[1].find('Version')!=-1 or _[1].find('Compiler')!=-1      
+        if _[0].isspace()==False:
+            if further_package_specification and block:
+                #we don't want to append these, since we don't even know the package name
+                continue
             else:
-                spec=spec+'^'                
-            spec=spec+_[0]    
+                block = False
+                _[0]=_[0].rstrip()            
+                if _[1].find('Version')!=-1:
+                    spec = spec+'@'
+                elif _[1].find('Compiler')!=-1:
+                    spec = spec+'%'
+                else:
+                    spec=spec+'^'
+            spec=spec+_[0]
+        else:
+            #we want to block further specification from the profile, if we don't even know the package name
+            if further_package_specification == False:
+                block=True
     return spec
 
 #Liefert alle Specs einer Config-Liste bzw. eines Benchmarktyps
@@ -1535,18 +1561,22 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
         for name in unselected_names:
             menutxt+=FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
         for name in unavail_names:
-            menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'   
+            menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'
+        for arg_name in farg:
+            full_name = tag_id_switcher(id)+'_cfg_'+arg_name+'.txt'
+            if full_name not in avail_names:
+                menutxt+=FCOL[6]+full_name+ml+'(does not exist)'+FEND+'\n'
     
     #Skriptbau, ggf. mit zusätzlichen Argumenten
     if extra_args!='':
         skript=build_batch(selected_profiles, bench_id, extra_args)
         menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n'+'\n'
+        menutxt+='\n'+shell('sbatch '+skript)
     else:
         skript=build_batch(selected_profiles, bench_id)
-        menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n'+'\n'    
-    
-    #shell('sbatch '+skript) <--- sollte umgebaut werden sobald der Rest stimmt
-    
+        menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n'+'\n'
+        menutxt+='\n'+shell('sbatch '+skript)
+      
     return skript
 
 #Hiermit soll das Skript gebaut werden 
@@ -1859,11 +1889,8 @@ def install_spec(expr):
     #run script    
     if os.path.isfile('{}/install.sh'.format(LOC))==True:
         
-        #original:
-        #return shell('chmod +x {}/install.sh ; sbatch {}/install.sh'.format(LOC,LOC))
-        #test:
-        menutxt+='chmod +x {}/install.sh ; sbatch {}/install.sh'.format(LOC,LOC)
-        
+        return shell('chmod +x {}/install.sh ; sbatch {}/install.sh'.format(LOC,LOC))
+
     #Return script path or some informations
     else:
         menutxt+=FCOL[6]+'\n    there is nothing to install'+FEND+'\n'
@@ -2017,7 +2044,7 @@ def menu():
             #Wir wollen auf jeden Fall auch die package Infos, selbst wenn refresh aus oder zu früh ist
             get_info = True
             if dbg:      
-                menutxt+=draw_table(stat_table, t_width, 0, 0.5, title='Boot Up Stats')
+                menutxt+=draw_table(stat_table, t_width, 0, 0.9, title='Boot Up Stats')
                 menutxt+='\n'
             if info_feed:
                 if spack_problem=='':
@@ -2221,7 +2248,7 @@ def osu_menu():
             return 0
         elif opt == '1' or opt == 'run':
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: »1-3,test,9 latency«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9 latency«\n'+ml+'     abort: »cancel«\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(OSU_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
@@ -2236,8 +2263,9 @@ def osu_menu():
             print_osu_menu(txt)
             expr=input_format().split()            
             if len(expr)<2:
-                txt+='Invalid input, maybe You forgot test-type e.g. latency'                
-                print_osu_menu(txt)                
+                txt+='invalid input, possible reason: unspecified test-type e.g. latency'                
+                print_osu_menu(txt)
+
             if expr=='cancel':
                 clear()
                 return 0
@@ -2248,14 +2276,14 @@ def osu_menu():
             print_osu_menu(view_installed_specs(tag_id_switcher(OSU_ID)))
         elif opt == '3'or opt == 'install':           
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to install?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+FORM[0]+'     inst. abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+FORM[0]+'     abort: »cancel«\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'teal/beige \t\t\t\t<=> \tpot. installable \n'+ml+'grey \t\t\t\t<=> \tinstalled \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(OSU_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(OSU_ID):
                 if left_size<len(name+mr):
-                    left_size-=len(ml)
                     txt+='\n'+ml
+                    left_size=t_width-len(ml)
                 #replace() enables a different color coding than for run    
                 txt+=name.replace(FCOL[7],FCOL[15]).replace(FCOL[4],FCOL[0])+FEND+mr
                 left_size-=len(name+mr)
@@ -2308,8 +2336,8 @@ def hpl_menu():
             return 0
         elif opt == '1' or opt == 'run':
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(HPL_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(HPL_ID):
@@ -2331,14 +2359,14 @@ def hpl_menu():
             print_hpl_menu(view_installed_specs(tag_id_switcher(HPL_ID)))
         elif opt == '3'or opt == 'install':           
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to install?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     abort: »cancel«\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'teal/beige \t\t\t\t<=> \tpot. installable \n'+ml+'grey \t\t\t\t<=> \tinstalled \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(HPL_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(HPL_ID):
                 if left_size<len(name+mr):
-                    left_size-=len(ml)
                     txt+='\n'+ml
+                    left_size=t_width-len(ml)
                 #replace() enables a different color coding than for run    
                 txt+=name.replace(FCOL[7],FCOL[15]).replace(FCOL[4],FCOL[0])+FEND+mr
                 left_size-=len(name+mr)
@@ -2391,8 +2419,8 @@ def hpcg_menu():
             return 0
         elif opt == '1' or opt == 'run':
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpcg_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpcg_cfg_1.txt,...,hpcg_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpcg_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpcg_cfg_1.txt,...,hpcg_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(HPCG_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(HPCG_ID):
@@ -2414,14 +2442,14 @@ def hpcg_menu():
             print_hpcg_menu(view_installed_specs(tag_id_switcher(HPCG_ID)))
         elif opt == '3'or opt == 'install':           
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to install?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpcg_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpcg_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpcg_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpcg_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     abort: »cancel«\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'teal/beige \t\t\t\t<=> \tpot. installable \n'+ml+'grey \t\t\t\t<=> \tinstalled \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(HPCG_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(HPCG_ID):
                 if left_size<len(name+mr):
-                    left_size-=len(ml)
                     txt+='\n'+ml
+                    left_size=t_width-len(ml)
                 #replace() enables a different color coding than for run    
                 txt+=name.replace(FCOL[7],FCOL[15]).replace(FCOL[4],FCOL[0])+FEND+mr
                 left_size-=len(name+mr)
