@@ -3,9 +3,12 @@ import os
 import glob
 import sys
 import re
+from datetime import datetime
+
 
 try:
     import matplotlib.pyplot as plt
+    from sb import file_w
 except ImportError:
         pass
 
@@ -43,7 +46,7 @@ def read_values(TIMESTEMP,BENCH):
             if label_token==True:
                 values[0]=['HPL Benchmark','Gflops','']  
                 
-            read_hpl(name,profiles.index(name),BENCH)
+            read_hpl(name,profiles.index(name),BENCH,TIMESTEMP)
             
         
         elif BENCH=='hpcg':
@@ -88,9 +91,9 @@ def read_osu(profile,index,BENCH):
             stringlist = f.readlines()         
             
         #reads results
-        for line in stringlist:
-            #Abfangen leerer Zeile
-            if len(line) == 0:
+        for line in stringlist:            
+            #Abfangen leerer Zeile        
+            if len(line) < 2:
                 continue            
             
             #reads mpi-implementation         
@@ -105,14 +108,19 @@ def read_osu(profile,index,BENCH):
             #reads axis-labels                
             elif line.find('#') != -1 and label_token==True:                    
                 values[0].extend([x.lstrip() for x in line[2:-1].split(' ',1)])
-                label_token=False                
+                label_token=False 
+         
+            #reads results           
+            elif line[0].isdigit() or line.split()[-1:][0].replace('.','').isdigit():   
+            
+                val = line.replace(' ',',',1).replace(' ','').split(',')               
+                values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][1].append(float(val[1].replace('\n','')))
                 
-            #reads results
-            elif line[0].isdigit():                    
-                val = line.replace(' ',',',1).replace(' ','').split(',')                
-                values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(val[0]))
-                values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][1].append(float(val[1].replace('\n','')))     
-    
+                if val[0]!='':
+                    values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(val[0]))
+                else:
+                    values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(iter_res.index(name))
+  
     return values
 
 def read_hpl(profile,index,BENCH,TIMESTEMP):
@@ -248,6 +256,11 @@ def run_plot(TIMESTEMP,BENCH):
     if len(values[1][0][0][0])==1:
         values[1]=sorted(values[1].copy(), key=lambda row: (row[0][1]))
         fig_typ='barh'
+        #reorganizes axis labels
+        if BENCH=='osu':                
+                for _ in values[0][2:]:
+                    values[0][1]+=' '+_
+                values[0][2]=''   
     
     
     for v in values[1]:
@@ -263,15 +276,18 @@ def run_plot(TIMESTEMP,BENCH):
             
     #format figure layout (size, legend, position etc.)       
     fig_layout(fig,ax,fig_typ)
-    ax_scale()
+    ax_scale(BENCH,fig_typ)
     
     plt.savefig('{}plot.png'.format('{}/projects/{}_res@{}/'.format(LOC,BENCH,TIMESTEMP)))
 
 
-def ax_scale():
+def ax_scale(BENCH,fig_typ):
     if BENCH == 'osu':
-        plt.xscale('log', base=2)
-        plt.yscale('log')
+        if fig_typ!='barh':
+            plt.xscale('log', base=2)
+            plt.yscale('log')
+        else:
+            plt.xscale('log',base=10)
     
     elif BENCH == 'hpl':
         plt.xscale('log',base=10)
@@ -308,6 +324,8 @@ def main():
     TIMESTEMP=str(sys.argv[1])
     BENCH=str(sys.argv[2])
     run_plot(TIMESTEMP,BENCH)
+    time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    file_w('{}/projects/{}_res@{}/plot.out'.format(LOC,BENCH,TIMESTEMP),'{} finished'.format(time),'a')
     
 if __name__ == "__main__":
     main()

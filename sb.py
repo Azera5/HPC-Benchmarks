@@ -9,6 +9,7 @@ import math
 import fnmatch
 import re
 import argparse
+import glob
 from os.path import exists 
 from argparse import RawTextHelpFormatter
 from plot import read_values, aggregate_results, values, label_token, append_count
@@ -431,11 +432,11 @@ def check_python():
                 if os.path.isfile('{}/install_python.sh'.format(LOC))==True:
                     shell('rm {}/install_python.sh'.format(LOC))
                 
-                shell('touch {}install_python.sh'.format(LOC))
+                shell('touch {}/install_python.sh'.format(LOC))
                 file_w('{}/install_python.sh'.format(LOC),install_py_script,'a')
                 menutxt+='\n'
                 menutxt+=FCOL[15]+'<info>    '+FEND+'Python installation started '
-                menutxt+=shell('echo {}/install_python.sh'.format(LOC))
+                menutxt+=shell('sbatch {}/install_python.sh'.format(LOC))
                 return
             elif answer==str(2):
                 return
@@ -1795,7 +1796,7 @@ def build_plot(t_id, bench,run_dir):
     jobtxt=write_slurm_params(cfg_profiles[0][0],3)
     jobtxt+='#SBATCH --job-name='+bench+'_plot\n' 
     jobtxt+='#SBATCH --error='+run_dir.replace('run','res')+'plot.err\n'   
-    jobtxt+='#SBATCH --output='+run_dir.replace('run','res')+'plot.err\n\n'   
+    jobtxt+='#SBATCH --output='+run_dir.replace('run','res')+'plot.out\n\n'   
     jobtxt+= 'python3 {}/plot.py '.format(LOC)+t_id+' '+bench
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads
@@ -1896,7 +1897,63 @@ def install_spec(expr):
         menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
         return ''
         
+def show_highlights(func, res_id='', bench_tag='', count=1):
+    try:
+        if res_id == '' or bench_tag == '':
+            finished_benchs=check_finished_results(bench=bench_tag)
+            print('test')
+            if len(finished_benchs)>1:                
+                txt='\n(0)  cancel'
+                for res in finished_benchs:
+                    pos=res[:res.find('@')].rfind('/')
+                    txt+='\n({})  {}'.format(str(finished_benchs.index(res)+1),res[pos+1:-8])
+                    
+                print('\n'+ml+FCOL[13]+FORM[0]+'which result do you wish to show?\n\n'+FEND)
+                print(txt)
+                
+                while True: 
+                    answer=input_format()
+                    
+                    for i in range (0,len(finished_benchs),1):
+                        if answer == 0:
+                            return
+                        elif answer == i:
+                            res=finished_benchs[i-1]
+                            res_id=res[res.find('@')+1:-8]
+                            pos=res[:res.find('@')].rfind('/')
+                            bench_tag=res[pos+1:res.find('_')-1]
+                            values=read_values(res_id,bench_tag)
+                    
+                    print(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option »(n) ...« use the corresponding integer »input:n«')
+                    
+            res_id = check_finished_results()
+            bench_tag = check_finished_results()[1]
+        
+        values=read_values(res_id,bench_tag)
+    
+    except Exception as exc:     
+        error_log('', locals(), traceback.format_exc())
 
+
+#returns a list of finished benchmarks
+def check_finished_results(selected='new',bench=''):
+    try:
+        finished_benchs=[]
+        results = glob.glob('{}/projects/{}*res@*/plot.out'.format(LOC,bench))
+        for res in results:
+            if selected == 'all' or file_r(res,0).find('fetched')==-1:
+                _=file_r(res,0).split()
+                
+                if len(_)<2:
+                    continue
+                
+                time=_[0]+' '+_[1]
+                finished_benchs.append([res,time])
+        
+        finished_benchs=sorted(finished_benchs.copy(), key=lambda row:(row[1]),reverse=True)
+        return [i[0] for i in finished_benchs]        
+    except Exception as exc:     
+        error_log('', locals(), traceback.format_exc())
 
 """
 Menu Functions
@@ -2208,12 +2265,13 @@ def osu_menu():
             if len(expr)<2:
                 txt+='invalid input, possible reason: unspecified test-type e.g. latency'                
                 print_osu_menu(txt)
+
             if expr=='cancel':
                 clear()
                 return 0
             print(expr[0].replace(' ',''))
-            scr_pth = bench_run(OSU_ID, expr[0].replace(' ',''),expr[1])
-            print_osu_menu('')
+            scr_pth = bench_run(OSU_ID, expr[0].replace(' ',''),expr[1])           
+            print_osu_menu('\n\n'+shell('sbatch {}'.format(scr_pth)))
         elif opt == '2' or opt == 'view':
             print_osu_menu(view_installed_specs(tag_id_switcher(OSU_ID)))
         elif opt == '3'or opt == 'install':           
