@@ -316,7 +316,7 @@ def extensive_spack_evaluation():
                 print('          '+FCOL[15]+'[{}.] '.format(test_list.index(e)+1)+FEND+e)
             print('          '+FCOL[7]+'search mode:'+FCOL[2]+' {}'.format(search_mode)+FEND)
         else:
-            print('          '+'no alternatives were detected! ({})'.format(search_mode))
+            print(FCOL[7]+'<info>    '+FEND+'no alternatives were detected! ({})'.format(search_mode))
         
         while True:
             print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
@@ -357,7 +357,7 @@ def extensive_spack_evaluation():
                 print('          '+FCOL[15]+'[{}.] '.format(test_list.index(e)+1)+FEND+e)
             print('          '+FCOL[7]+'search mode:'+FCOL[2]+' {}'.format(search_mode)+FEND)
         else:
-            print('          '+'no alternatives were detected! ({})'.format(search_mode))
+            print(FCOL[7]+'<info>    '+FEND+'no alternatives were detected! ({})'.format(search_mode))
 
         while True:
             print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
@@ -1540,12 +1540,12 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     if extra_args!='':
         skript=build_batch(selected_profiles, bench_id, extra_args)
         menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n'+'\n'
+        menutxt+='\n'+shell('sbatch '+skript)
     else:
         skript=build_batch(selected_profiles, bench_id)
-        menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n'+'\n'    
-    
-    #shell('sbatch '+skript) <--- sollte umgebaut werden sobald der Rest stimmt
-    
+        menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n'+'\n'
+        menutxt+='\n'+shell('sbatch '+skript)
+      
     return skript
 
 #Hiermit soll das Skript gebaut werden 
@@ -1960,7 +1960,7 @@ def menu():
             #Wir wollen auf jeden Fall auch die package Infos, selbst wenn refresh aus oder zu früh ist
             get_info = True
             if dbg:      
-                menutxt+=draw_table(stat_table, t_width, 0, 0.5, title='Boot Up Stats')
+                menutxt+=draw_table(stat_table, t_width, 0, 0.9, title='Boot Up Stats')
                 menutxt+='\n'
             if info_feed:
                 if spack_problem=='':
@@ -2164,7 +2164,7 @@ def osu_menu():
             return 0
         elif opt == '1' or opt == 'run':
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: »1-3,test,9 latency«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9 latency«\n'+ml+'     abort: »cancel«\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(OSU_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
@@ -2179,7 +2179,7 @@ def osu_menu():
             print_osu_menu(txt)
             expr=input_format().split()            
             if len(expr)<2:
-                txt+='Invalid input, maybe You forgot test-type e.g. latency'                
+                txt+='invalid input, possible reason: unspecified test-type e.g. latency'                
                 print_osu_menu(txt)
             if expr=='cancel':
                 clear()
@@ -2191,14 +2191,14 @@ def osu_menu():
             print_osu_menu(view_installed_specs(tag_id_switcher(OSU_ID)))
         elif opt == '3'or opt == 'install':           
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to install?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+FORM[0]+'     inst. abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+FORM[0]+'     abort: »cancel«\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'teal/beige \t\t\t\t<=> \tpot. installable \n'+ml+'grey \t\t\t\t<=> \tinstalled \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(OSU_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(OSU_ID):
                 if left_size<len(name+mr):
-                    left_size-=len(ml)
                     txt+='\n'+ml
+                    left_size=t_width-len(ml)
                 #replace() enables a different color coding than for run    
                 txt+=name.replace(FCOL[7],FCOL[15]).replace(FCOL[4],FCOL[0])+FEND+mr
                 left_size-=len(name+mr)
@@ -2251,8 +2251,8 @@ def hpl_menu():
             return 0
         elif opt == '1' or opt == 'run':
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(HPL_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(HPL_ID):
@@ -2274,14 +2274,14 @@ def hpl_menu():
             print_hpl_menu(view_installed_specs(tag_id_switcher(HPL_ID)))
         elif opt == '3'or opt == 'install':           
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to install?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpl_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpl_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     abort: »cancel«\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'teal/beige \t\t\t\t<=> \tpot. installable \n'+ml+'grey \t\t\t\t<=> \tinstalled \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(HPL_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(HPL_ID):
                 if left_size<len(name+mr):
-                    left_size-=len(ml)
                     txt+='\n'+ml
+                    left_size=t_width-len(ml)
                 #replace() enables a different color coding than for run    
                 txt+=name.replace(FCOL[7],FCOL[15]).replace(FCOL[4],FCOL[0])+FEND+mr
                 left_size-=len(name+mr)
@@ -2334,8 +2334,8 @@ def hpcg_menu():
             return 0
         elif opt == '1' or opt == 'run':
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpcg_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpcg_cfg_1.txt,...,hpcg_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpcg_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpcg_cfg_1.txt,...,hpcg_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(HPCG_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(HPCG_ID):
@@ -2357,14 +2357,14 @@ def hpcg_menu():
             print_hpcg_menu(view_installed_specs(tag_id_switcher(HPCG_ID)))
         elif opt == '3'or opt == 'install':           
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to install?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpcg_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpcg_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'hpcg_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'hpcg_cfg_1.txt,...,hpl_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     abort: »cancel«\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'teal/beige \t\t\t\t<=> \tpot. installable \n'+ml+'grey \t\t\t\t<=> \tinstalled \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. syntax errors etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(HPCG_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for name in avail_pkg(HPCG_ID):
                 if left_size<len(name+mr):
-                    left_size-=len(ml)
                     txt+='\n'+ml
+                    left_size=t_width-len(ml)
                 #replace() enables a different color coding than for run    
                 txt+=name.replace(FCOL[7],FCOL[15]).replace(FCOL[4],FCOL[0])+FEND+mr
                 left_size-=len(name+mr)
