@@ -1,38 +1,33 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import os
 import glob
 import sys
+import re
 
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+        pass
 
-############# Hinweis zur Datenstruktur values ##############
+#############  hints regarding data structure  ##############
 #                                                           #
 #  values =[[metadata][results]]                            #  
 #  [metadata] = [[titel][x-label][y-label]]                 #
 #  [results]  = [[profile_1],[profile_2],...,[profile_n]]   #
 #  [profile_x] = [[aggregated values],[iterations]]         #
-#  [profile_result] = [[x1,...,xn],[y1,...,yn],...,label] #
+#  [profile_result] = [[x1,...,xn],[y1,...,yn],...,label]   #
 #                                                           #
 #############################################################
 
 
-#Der Timestemp muss ohne [] angegeben werden!
-TIMESTEMP=str(sys.argv[1])
-BENCH=str(sys.argv[2])
-
 #plot.py Path
 LOC=str(os.path.dirname(os.path.abspath(__file__)))
 
-
-#path=glob.glob('{}/projects/*'.format(LOC)+TIMESTEMP+'*results*/*.out')[0]
-#end=path.rfind(']')
-#plot save path
-path='{}/projects/{}_res@{}/'.format(LOC,BENCH,TIMESTEMP)
 values = [[],[]]
 label_token = True
-append_count= 0
+append_count = 0
 
-#Auslesen der Results
+#reads results
 def read_values(TIMESTEMP,BENCH):
     profiles = glob.glob('{}/projects/*'.format(LOC)+'*res@'+TIMESTEMP+'/*/')
     global values
@@ -40,33 +35,31 @@ def read_values(TIMESTEMP,BENCH):
     global label_token
     
     for name in profiles:    
-        if BENCH=='osu':
-            #values[1].append([[[],[],[]],[]])  
-            read_osu(name,profiles.index(name))
+        if BENCH=='osu':             
+            read_osu(name,profiles.index(name),BENCH)
 
         elif BENCH=='hpl':            
-            #Meta-labels
+            #meta-labels
             if label_token==True:
                 values[0]=['HPL Benchmark','Gflops','']  
                 
-            read_hpl(name,profiles.index(name))
+            read_hpl(name,profiles.index(name),BENCH)
             
         
         elif BENCH=='hpcg':
-            #Meta-labels
+            #meta-labels
             if label_token==True:
-                values[0]=['HPCG Benchmark','Gflops','']        
-            
-            #values[1].append([[[],[],[]],[]])
-            read_hpcg(name,profiles.index(name))    
+                values[0]=['HPCG Benchmark','Gflops','']            
+            read_hpcg(name,profiles.index(name),BENCH,TIMESTEMP)    
 
-        #reads function to aggregate the data
-        aggregate_func=read_aggregate_func(name[1:-1])
-           
-        #aggregate data across all iterations
-        aggregated=aggregate_results(values[1][len(values[1])-1][1],aggregate_func)
+        #reads aggregation-type
+        aggregate_func=read_aggregate_func(name[1:-1],BENCH)           
+        
                 
         if append_count>0:
+            #aggregates data across all iterations
+            aggregated=aggregate_results(values[1][len(values[1])-1][1],aggregate_func)
+            
             values[1][len(values[1])-1][0][0]=aggregated[0]
             values[1][len(values[1])-1][0][1]=aggregated[1]
             values[1][len(values[1])-1][0][2]='({}) [{}#{}]\n{}'.format(name[name.rfind(TIMESTEMP+'/')+len(TIMESTEMP)+1:-1],aggregate_func,len(values[1][len(values[1])-1][1]),values[1][len(values[1])-1][0][2])
@@ -76,7 +69,7 @@ def read_values(TIMESTEMP,BENCH):
   
     return values
 
-def read_osu(profile,index):
+def read_osu(profile,index,BENCH):
     global values
     global label_token
     global append_count
@@ -94,27 +87,27 @@ def read_osu(profile,index):
         with open(name,'r') as f:
             stringlist = f.readlines()         
             
-        #Auslesen der Results
+        #reads results
         for line in stringlist:
             #Abfangen leerer Zeile
             if len(line) == 0:
                 continue            
             
-            #Auslesen MPI-Implementierung            
+            #reads mpi-implementation         
             name_=profile[1:-1]
             with open('{}/configs/'.format(LOC)+BENCH+name_[name_.rfind('/'):]+'.txt','r') as f:
-                values[1][len(values[1])-1][0][2]='{} ({})'.format(f.readlines()[7].split()[0],name_[name_.rfind('/')+1:])
+                values[1][len(values[1])-1][0][2]='{}'.format(f.readlines()[7].split()[0])
             
-            #Titel Auslesen
+            #reads title
             if line.find('# OSU MPI ')!=-1 and label_token==True:
                 values[0]=[line[line.find('# OSU MPI ')+10:-5]]                
                 
-            #Achsen-Label Auslesen                
+            #reads axis-labels                
             elif line.find('#') != -1 and label_token==True:                    
                 values[0].extend([x.lstrip() for x in line[2:-1].split(' ',1)])
                 label_token=False                
                 
-            #Ergebnisse Auslesen
+            #reads results
             elif line[0].isdigit():                    
                 val = line.replace(' ',',',1).replace(' ','').split(',')                
                 values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(val[0]))
@@ -122,8 +115,8 @@ def read_osu(profile,index):
     
     return values
 
-def read_hpl(profile,index):
-    global values# = [[],[]]
+def read_hpl(profile,index,BENCH,TIMESTEMP):
+    global values
     global label_token
     global append_count
     iter_res = glob.glob(profile+'*.out')
@@ -141,24 +134,33 @@ def read_hpl(profile,index):
         with open(name,'r') as f:
             stringlist = f.readlines() 
         
-        #Profilmerkmale (N,P,Q)
+        #profile features: (N,P,Q)
         if label_token==True:
-            values[1][len(values[1])-1][0][2]='N {}\nP{}; Q{} ({})'.format(stringlist[18].split()[2],stringlist[21].split()[2],stringlist[22].split()[2],name[name.rfind('#')+1:-4])                        
+            slurm_param=read_slurm_param(name,TIMESTEMP)
+            
+            values[1][len(values[1])-1][0][2]='Ps {}; Qs {}; threshold {}Sizes (Ns) {}; Blocksizes (NBs) {}\nSlurm: nodes {}; cpus per task: {}\n'.format(
+                stringlist[21].split()[2],
+                stringlist[22].split()[2], 
+                stringlist[41].split('than')[1].lstrip(),
+                re.sub(' +', ' ',stringlist[18].split(':')[1].lstrip()[:-2]),
+                re.sub(' +', ' ',stringlist[19].split(':')[1].lstrip()[:-2]),                
+                slurm_param[0],
+                slurm_param[1])                        
+            
             label_token=False
         
-        #Results
+        #results
         val=float(stringlist[46].split()[6].replace('.',''))
         values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(index))
         values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][1].append(val)
        
     return values 
 
-def read_hpcg(profile,index):
+def read_hpcg(profile,index,BENCH,TIMESTEMP):
     global values
     global label_token
     global append_count
-    iter_res = glob.glob(profile+'*.out')
-    
+    iter_res = glob.glob(profile+'*.out')   
     
     for name in iter_res:       
         if os.stat(name).st_size == 0:
@@ -173,30 +175,30 @@ def read_hpcg(profile,index):
         with open(name,'r') as f:
             stringlist = f.readlines() 
                             
-        #Profilmerkmale number of processes, threads per processe, problem size; Slurm: nodes, cpus_per_task      
+        #profile features: number of processes, threads per processe, problem-size; Slurm: nodes, cpus_per_task      
         if label_token==True:            
-            problem_size='?'
+            problem_size='nA'
             
-            slurm_param = read_slurm_param(name)
-            #readas problem size from profil_cfg
+            slurm_param = read_slurm_param(name,TIMESTEMP)
+            #reads problem-size from profil_cfg
             name_=profile[1:-1]
             with open('{}/configs/'.format(LOC)+BENCH+name_[name_.rfind('/'):]+'.txt','r') as f:
                 _=f.readlines()[12].split()
                 problem_size='{} {} {}'.format(_[0],_[1],_[2])
             
-            values[1][len(values[1])-1][0][2]='size {}; processes {}; threads per proc. {};\nSlurm: nodes {}; cpus per task: {}'.format(problem_size,stringlist[4].split('=')[1][:-1],stringlist[5].split('=')[1][:-1],slurm_param[0],slurm_param[1])                        
+            values[1][len(values[1])-1][0][2]='size {}; processes {}; threads per proc. {}\nSlurm: nodes {}; cpus per task: {}\n'.format(problem_size,stringlist[4].split('=')[1][:-1],stringlist[5].split('=')[1][:-1],slurm_param[0],slurm_param[1])                        
             label_token=False
         
-        #Results
+        #results
         val=float(stringlist[118].split('=')[1])        
         values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(index))
         values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][1].append(val)
     
     return values
 
-def read_aggregate_func(profile):
+def read_aggregate_func(profile,BENCH):
     name=profile[profile.rfind('/')+1:]
-    #Read function
+    #read function
     with open('{}/configs/{}/{}.txt'.format(LOC,BENCH,name),'r') as f:
         aggregate_func=f.readlines()[2].split()[0]
     
@@ -216,9 +218,9 @@ def aggregate_results(list, func):
     
     return _.tolist()
 
-def read_slurm_param(name):
-    nodes='?'
-    cpus_per_task='?'
+def read_slurm_param(name,TIMESTEMP):
+    nodes='nA'
+    cpus_per_task='nA'
     #reads number of nodes and cpus-per-task from slurm script            
     with open(name[:name.find(TIMESTEMP+'/')+len(TIMESTEMP)].replace('res','run')+name[name.rfind('/'):].replace('.out','.sh')) as f:
         for line_index, line in enumerate(f):
@@ -259,11 +261,11 @@ def run_plot(TIMESTEMP,BENCH):
             
             
             
-    #formats the figure layout (size, legend, position etc.)       
+    #format figure layout (size, legend, position etc.)       
     fig_layout(fig,ax,fig_typ)
     ax_scale()
     
-    plt.savefig('{}plot.png'.format(path))
+    plt.savefig('{}plot.png'.format('{}/projects/{}_res@{}/'.format(LOC,BENCH,TIMESTEMP)))
 
 
 def ax_scale():
@@ -277,34 +279,37 @@ def ax_scale():
     elif BENCH == 'hpcg':
         plt.xscale('log',base=10)
 
-#Formats the figure layout
+#format figure layout
 def fig_layout(fig, ax, fig_typ):
     if fig_typ=='barh':
-        fig.set_figwidth(13)
+        fig.set_figwidth(14)
         fig.set_figheight(5+0.2*len(values[1]))   
-        fig.subplots_adjust(left=0.1,right=0.65)
+        fig.subplots_adjust(left=0.1,right=0.6)
 
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[::-1], labels[::-1],loc='upper left', bbox_to_anchor=(1, 1), fancybox=True, shadow=True, ncol=1)
                
         plt.yticks(ticks=range(0,len(values[1])),labels=[_[0][2][1:_[0][2].find(')')] for _ in values[1]])        
     
-    
-    plt.legend()
-    plt.grid(color='b', alpha=0.5, linestyle='dashed', linewidth=0.5)
+    else:
+        plt.legend()
+        plt.grid(color='b', alpha=0.5, linestyle='dashed', linewidth=0.5)
     
     plt.title(values[0][0])
     plt.xlabel(values[0][1])
     plt.ylabel(values[0][2]) 
     
-#Debugfunction will be print each triple (x,y,label)
+#debugging-function will print each triple (x,y,label)
 def plot_list():
     for val in values[1]:
         print(val[0])
 
 def main():   
-    #plot_list()
+    TIMESTEMP=str(sys.argv[1])
+    BENCH=str(sys.argv[2])
     run_plot(TIMESTEMP,BENCH)
     
 if __name__ == "__main__":
     main()
+    
+
