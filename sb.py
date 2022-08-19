@@ -551,7 +551,7 @@ def get_cfg(bench,farg='all'):
                 sublist.append(config_cut(ln))
                 if block==2:
                     spec_.append(ln)
-            #a found parting line implies that we're ready to append the finished block
+            #a parting line implies that we're ready to append the finished block
             elif (len(sublist)>0) and (ln.find('---')>-1):                
                 cfg_profiles[id][names.index(p)].append(sublist)                
                 block+=1
@@ -562,14 +562,12 @@ def get_cfg(bench,farg='all'):
                 continue                   
         #normal profiles need additional metadata
         if id != MISC_ID:
-            #normalises whiespaces in the config 
+            #normalises whitespaces in the config 
             if auto_space_normalization:                
                 normalise_config(get_cfg_path(bench)+p,blocks=block+1)
             spec = get_spec(spec_,bench)
             cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]
-        
-
-        
+       
         sublist, spec_, spec = [], [], ''       
               
         #small illustration of loadprogress
@@ -1028,20 +1026,31 @@ def get_cfg_names(pth, typ):
 
 #Bekommt eine Liste bzgl. der Packages aus einer Config, liefert die package spec
 def get_spec(cfg_list,bench):
+    block=False
     if bench == 'osu':
         bench='osu-micro-benchmarks'
     spec = bench    
     for _ in cfg_list:      
         _ = _.split('[')
-        if len(_[0]) > 0:
-            _[0]=_[0].rstrip()            
-            if _[1].find('Version')!=-1:
-                spec = spec+'@'
-            elif _[1].find('Compiler')!=-1:
-                spec = spec+'%'
+        further_package_specification = _[1].find('Version')!=-1 or _[1].find('Compiler')!=-1      
+        if _[0].isspace()==False:
+            if further_package_specification and block:
+                #we don't want to append these, since we don't even know the package name
+                continue
             else:
-                spec=spec+'^'                
-            spec=spec+_[0]    
+                block = False
+                _[0]=_[0].rstrip()            
+                if _[1].find('Version')!=-1:
+                    spec = spec+'@'
+                elif _[1].find('Compiler')!=-1:
+                    spec = spec+'%'
+                else:
+                    spec=spec+'^'
+            spec=spec+_[0]
+        else:
+            #we want to block further specification from the profile, if we don't even know the package name
+            if further_package_specification == False:
+                block=True
     return spec
 
 #Liefert alle Specs einer Config-Liste bzw. eines Benchmarktyps
