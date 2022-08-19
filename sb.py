@@ -11,7 +11,7 @@ import re
 import argparse
 from os.path import exists 
 from argparse import RawTextHelpFormatter
-
+from plot import read_values, aggregate_results, values, label_token, append_count
 
 #debugging
 import sys
@@ -19,7 +19,7 @@ from io import StringIO
 import traceback
 
 #these are just simple name-reservations/declarations (*not* initializations), otherwise some function definitions would have to be changed
-LOC, SPACK_XPTH, error_stack, cfg_profiles, form_factor_menu, t_width, ml, mr, menutxt, dbg, menu_ctrl, full_bin_paths, auto_space_normalization, SPACK_SEARCH_ROOT, termination_logging, path_logging, info_feed, test_only = (0,)*18
+LOC, SPACK_XPTH, error_stack, cfg_profiles, form_factor_menu, t_width, ml, mr, menutxt, dbg, menu_ctrl, full_bin_paths, auto_space_normalization, SPACK_SEARCH_ROOT, termination_logging, path_logging, info_feed, test_only, check_python_setting = (0,)*19
 
 """
 Initialization of Colorcodes 
@@ -94,6 +94,7 @@ FORM_M = [ '\33[1m', '\33[3m', '\33[4m', '\33[7m', '\33[5m', '\33[6m' ]
 #stop formatting
 FEND = '\33[0m'
 
+
 """
 Command-Line-Parameter
 """
@@ -112,10 +113,11 @@ def cl_arg():
     FCOL[15]+'hpl <cfg>,<cfg>,...,<cfg>\n'+FEND+
     FCOL[2]+'     e.g.: -r hpl 1,3-4,Test1\n'+
     '           -r hpl all <=> -r hpl\n\n'+
-    FCOL[15]+'osu <test> <cfg>,<cfg>,...,<cfg> \n'+FEND+
+    FCOL[15]+'osu_<test>_<flags> <cfg>,<cfg>,...,<cfg> \n'+FEND+
     FCOL[7]+'     tests: {latency, bw, bcast, barrier, allreduce}\n'+FEND+
-    FCOL[2]+'     e.g.: -r osu latency 1,3-4,example\n'+
-    '           -r osu latency all <=> -r osu latency\n\n'+
+    FCOL[2]+'     e.g.: -r osu_latency 1,3-4,example\n'+
+    FCOL[2]+'           -r osu_latency_i500:1000_x200 1,3-4,example\n'+
+    '           -r osu_latency all <=> -r osu_latency\n\n'+
     FCOL[15]+'hpcg <cfg>,<cfg>,...,<cfg>\n'+FEND+
     FCOL[2]+'     e.g.: -r hpcg 1,3-4,Test1\n'+
     '           -r hpcg all <=> -r hpcg\n\n'+FEND)
@@ -131,6 +133,7 @@ def cl_arg():
     FCOL[7]+'key difference: '+FEND+'creates *non-persistent* dummy projects and prints the error stack!\n'+
     FCOL[2]+'     e.g.: -t hpl 1,3-4,Test1\n'+
     '           etc.\n\n'+FEND+
+    FCOL[15]+'<info>    '+FEND+'clean up is »rm -r ...«-based respective to sub-directories named like »*@*[dummy]«,\n'+
     'please be cautious with naming data in the project directory this way\n\n')
     
     parser.add_argument('-p','--profiles',nargs=1,type=str,help=''+
@@ -151,6 +154,8 @@ def cl_arg():
     '     '+FCOL[2]+'e.g.: -c projects\n'+
     '           -c all\n'+FEND+
     FCOL[15]+'<info>    '+FEND+'please consider saving relevant project results beforehand\n')
+    
+    
     args= parser.parse_args()
     
     #Clean files
@@ -265,8 +270,8 @@ def evaluate_paths():
         else:
             pth = LOC+'/configs/{}/'.format(tag_id_switcher(id))
         BENCH_PTHS[id]=pth
-        #loadprogress()
-        
+        #loadprogress('')
+    
     evaluate_paths_t=time.time()-timestart
 
 #no timestats because of the integration into path evaluation
@@ -290,11 +295,13 @@ def extensive_spack_evaluation():
         alternatives = True
 
     #there is a path but is that an actual spack-directory? 
-    if len(SPACK_XPTH)>0 and SPACK_XPTH.isspace()!=True:        
+    if len(SPACK_XPTH)>0 and SPACK_XPTH.isspace()!=True:          
+        
         for e in test_list:
             #is that our spack?
             if e.find(SPACK_XPTH)!=-1 and check_is_dir(SPACK_XPTH)==False:
                 #it is and therefore should be used
+                check_python()
                 return True
                
         print('\n')
@@ -322,21 +329,24 @@ def extensive_spack_evaluation():
             answer=input_format()        
         
             if answer==str(1):
+                check_python()
                 return True
             elif answer==str(2):
                 install_spack(SPACK_XPTH)
+                check_python()
                 return True
             elif answer==str(3) or answer=='quit' or answer=='exit':
                 sys.exit(-1)
             elif answer==str(4) and alternatives:
                 print(FCOL[14]+'\n- - - which one? - - -'+FEND)
                 print('1 <=> first one & up to '+str(len(test_list))+' options')
-                SPACK_XPTH = test_list[int(input_format())-1]
+                SPACK_XPTH = test_list[int(input_format())-1]                
                 file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
+                check_python()
                 return True
             else:
                 print('\ninvalid input')
-                
+               
     #there is no path specified, so we have to ask how to continue
     else:
         print(FCOL[6]+'\n\n<warning> '+FEND+'there\'s no specified path for spack!\n')
@@ -365,6 +375,7 @@ def extensive_spack_evaluation():
                 print(FCOL[7]+'\nsb.py was executed in:\n'+FEND+FCOL[2]+LOC+FEND)
                 print(FCOL[0]+'\ne.g. input for local installation:\n'+LOC+'/spack/bin/spack'+FEND)
                 install_spack(input_format().strip())
+                check_python()
                 return True
             elif answer==str(2) or answer=='quit' or answer=='exit':
                 sys.exit(-1)
@@ -373,10 +384,58 @@ def extensive_spack_evaluation():
                 print('1 <=> first one & up to '+str(len(test_list))+' options')
                 SPACK_XPTH = test_list[int(input_format())-1]
                 file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
+                check_python()
                 return True
             else:
                 print('\ninvalid input')
 
+def check_python():
+    global menutxt
+    if check_python_setting==False:
+        return
+        
+    pth_spack=SPACK_XPTH[:SPACK_XPTH.find('spack')+5]
+    py=shell('find '+pth_spack+' -name python | grep bin').split('\n')[:-1]
+    
+    if len(py)==0:        
+         while True:
+            print(FCOL[6]+'\n\n<warning> '+FEND+'In the current spack was no python package found.\n          It is necessary for plotting the results (matplotlib installation)!')
+            print(FCOL[14]+'\n- - - how to proceed? - - -'+FEND)
+            print('(1) install python to the current spack')
+            print('(2) ignore and proceed (maybe plotting doesn\'t work)')
+            print('(3) ignore and proceed, don\'t ask again (maybe plotting doesn\'t work)')
+            print('(4) terminate')
+           
+            answer=input_format()
+            
+            if answer==str(1):
+                install_py_script=write_slurm_params(cfg_profiles[0][0],2)+'\n'
+                install_py_script+='source {}/share/spack/setup-env.sh\n'.format(SPACK_XPTH[:-9])
+                install_py_script+='spack install python'
+                                
+                if os.path.isfile('{}/install_python.sh'.format(LOC))==True:
+                    shell('rm {}/install_python.sh'.format(LOC))
+                
+                shell('touch {}install_python.sh'.format(LOC))
+                file_w('{}/install_python.sh'.format(LOC),install_py_script,'a')
+                menutxt+='\n'
+                menutxt+=FCOL[15]+'<info>    '+FEND+'Python installation started '
+                menutxt+=shell('echo {}/install_python.sh'.format(LOC))
+                return
+            elif answer==str(2):
+                return
+            elif answer==str(3):
+                menutxt+='\n'
+                menutxt+=(FCOL[15]+'<info>    '+FEND+'Python check disabled! Can be changed in settings or mem.txt')
+                if int(get_mem_digit(10))==1:
+                    mode_switch('check_python_setting', 0)
+                    file_w('{}/mem.txt'.format(LOC),'check_python_setting\t\t\t[0]',10)
+                return
+            elif answer==str(4) or answer=='quit' or answer=='exit':               
+                sys.exit(-1)
+            else:
+                print('\ninvalid input')
+        
 #Vorbereitung des Arrays mit den Profildaten
 def prepare_array():
     global cfg_profiles, prepare_array_t
@@ -384,7 +443,7 @@ def prepare_array():
     
     #['test']*n <=> ['test, 'test', ...] or ['test'*n] <=> ['testtesttest...']
     #Spezielle Angaben z.B. welche Partition/Nodes usw. gelten für Installationsdienste etc.
-    cfg_profiles[MISC_ID].append([[]]*4)  
+    cfg_profiles[MISC_ID].append([[]])  
     #Für jeden Bench eine Liste, in jeder dieser Listen... 
     for id in BENCH_ID_LIST:
         if id==MISC_ID:
@@ -393,11 +452,11 @@ def prepare_array():
         #for _ in range(len(glob.glob(BENCH_PTHS[id]))): (alternative?)
         for _ in range(len(get_names(BENCH_PTHS[id]))):       
             #Für jedes Profil existieren verschiedene Blöcke an Informationen (z.B. über SLURM-Einstellungen)
-            cfg_profiles[id].append([[]]*6)
+            cfg_profiles[id].append([[]])
             #loadprogress('')
     prepare_array_t=time.time()-timestart
 
-#Nachsehen ob Fehlerlogs etc. existieren, welche Einstellungen herrschen
+#checks if error log exist and some settings
 def check_data():
     global check_data_t, initm, mr, ml, colour_support, refresh_intervall, form_factor_menu ,LOC
     timestart = time.time()
@@ -417,6 +476,7 @@ def check_data():
         txt+='\ntermination_logging\t\t\t[0]'
         txt+='\npath_logging\t\t\t[0]'
         txt+='\nauto_space_normalization\t\t\t[0]'
+        txt+='\ncheck_python_setting\t\t\t[1]'
         txt+='\n------------------last boot up stats------------------'
         txt+='\n----------------no intended user input----------------'
         txt+='\nevaluate_paths\t\t\t[]'
@@ -437,9 +497,10 @@ def check_data():
         mode_switch('termination_logging',int(get_mem_digit(7)))
         mode_switch('path_logging',int(get_mem_digit(8)))
         mode_switch('auto_space_normalization',int(get_mem_digit(9)))
+        mode_switch('check_python_setting',int(get_mem_digit(10)))
     check_data_t=time.time()-timestart
 
-#Nachsehen ob config-Verzeichnisse etc. existieren
+#checks config directories
 def check_dirs():
     global initm, check_dirs_t
     timestart = time.time()
@@ -449,12 +510,12 @@ def check_dirs():
         if BENCH_PTHS.index(pth)==0:
             continue
         if os.path.isdir(pth[:-1])==False:
-            #Hinweis: '/dir1/dir2/.../'[:-1] <=> '/dir1/dir2/...'
+            #notice: '/dir1/dir2/.../'[:-1] <=> '/dir1/dir2/...'
             shell('mkdir -p '+pth[:-1])
             initm+='Ein Config-Verzeichnis (.../configs/{}) für {} wurde erstellt ...\n'.format(tag_id_switcher(BENCH_PTHS.index(pth)))
     check_dirs_t=time.time()-timestart
 
-#Liest die Profile aus den lokalen Configs aus
+#reads profiles from local configs
 def get_cfg(bench,farg='all'):
     timestart = time.time()
     global cfg_profiles, get_cfg_t
@@ -464,46 +525,58 @@ def get_cfg(bench,farg='all'):
     
     if id != MISC_ID:
         print('\nloading {}'.format(bench))
+    
     if farg=='all':
         names = get_cfg_names(get_cfg_path(bench), bench)
     else:
         names = farg_to_list(farg,bench)
-        cfg_profiles[id]=cfg_profiles[id][:len(names)]
+        cfg_profiles[id]=cfg_profiles[id][:len(names)]    
+
     
-    #Für jedes Profil...
+    #for each profile
     for p in names:
         block = 1
         txtfile = open(get_cfg_path(bench)+p, 'r')
         txtlist = txtfile.readlines()
-        #...jede Zeile passend einsortieren!
-        for ln in txtlist:
-            #Eine reguläre Zeile wird in der Subliste gesammelt
-            if (ln.find('---')==-1) and (ln.find('[Pfad')==-1):
+        test=''
+        #inserts each row accordingly
+        for ln in txtlist:                
+            #last block & reset of variables            
+            if txtlist.index(ln)==len(txtlist)-1: 
+                sublist.append(config_cut(ln))                              
+                cfg_profiles[id][names.index(p)].append(sublist)               
+                cfg_profiles[id][names.index(p)].append([])
+            #collects regular rows in a sublist
+            elif (ln.find('---')==-1) and (ln.find('[Pfad')==-1):                                   
                 sublist.append(config_cut(ln))
                 if block==2:
                     spec_.append(ln)
-            #Eine Trennzeile löst die Eingliederung eines gefüllten Blocks aus
-            elif (len(sublist)>0) and (ln.find('---')>-1):
-                cfg_profiles[id][names.index(p)][block]=sublist
+            #a found parting line implies that we're ready to append the finished block
+            elif (len(sublist)>0) and (ln.find('---')>-1):                
+                cfg_profiles[id][names.index(p)].append(sublist)                
                 block+=1
                 sublist=[]
                 continue
-            #Eine folgende Trennzeile macht gar nichts
-            else:
+            #skips further parting lines
+            else:            
                 continue                   
-        #Normale Profile brauchen auch noch Metadaten
+        #normal profiles need additional metadata
         if id != MISC_ID:
-            if auto_space_normalization:
-                normalise_config(get_cfg_path(bench)+p)
+            #normalises whiespaces in the config 
+            if auto_space_normalization:                
+                normalise_config(get_cfg_path(bench)+p,blocks=block+1)
             spec = get_spec(spec_,bench)
             cfg_profiles[id][names.index(p)][0] = [p, get_cfg_path(bench)+p, get_target_path(spec), spec]
-        #Letzter Block & Resett der Variablen
-        cfg_profiles[id][names.index(p)][block]=sublist
-        sublist, spec_, spec = [], [], '' 
-        #Kleine Illustration des Ladestandes
+        
+
+        
+        sublist, spec_, spec = [], [], ''       
+              
+        #small illustration of loadprogress
         if id != MISC_ID:
             progressbar(names.index(p)+1, len(names))        
         txtfile.close()
+    print(test)   
     #not »get_cfg_t=time.time()-timestart« because we might have multiple loading operations
     get_cfg_t+=time.time()-timestart    
 
@@ -523,7 +596,7 @@ def save_times():
     stat_table.append([str('{:08.6f}'.format(check_dirs_t))+' [s]','dir. verification   ƒ@init.'])
     stat_table.append([str('{:08.6f}'.format(get_cfg_t))+' [s]','config loading      ƒ@cl_arg();menu()'])
 
-#Sucht Matplotlib (installiert falls nicht Vorhanden)
+#looking for matplotlib and installs if not found
 def find_matplot_python_hash():
     pth_spack=SPACK_XPTH[:SPACK_XPTH.find('spack')+5]
     pth=shell('find {} -name matplotlib'.format(pth_spack))
@@ -554,6 +627,7 @@ def find_matplot_python_hash():
     return '/'+pth
 
 def comline_run_helper(comline_args):
+    global menutxt
     #base case: benchmarks without extra arguments
     if tag_id_switcher(comline_args[0]) in BENCHS_WITHOUT_EXTRA_ARGS: 
         #e.g. »python3 sb.py -r hpl« <=> we want to run all profiles for hpl
@@ -565,13 +639,27 @@ def comline_run_helper(comline_args):
             return bench_run(tag_id_switcher(comline_args[0]),comline_args[1])                
    
     #bechmarks with potential extra arguments are handled on individual basis via elifs
-    elif comline_args[0]=='osu':
-        if len(comline_args) < 3 or comline_args[2]=='all':
-            get_cfg(comline_args[0])
-            return bench_run(tag_id_switcher(comline_args[0]),'all',comline_args[1])                                       
-        else:
-            get_cfg(comline_args[0],comline_args[2])
-            return bench_run(tag_id_switcher(comline_args[0]),comline_args[2],comline_args[1])
+    elif comline_args[0].find('osu')!=-1:        
+         
+        osu_instruction=comline_args[0].split('_')        
+        #Catches invalid arguments 
+        if len(osu_instruction)<2:
+            menutxt+=FCOL[9]+'invalid arguments'+FEND+': {}'.format(' '.join(map(str,comline_args)))
+            return '-1'       
+        #prepares extra arguments e.g. latency or osu-flags
+        elif len(osu_instruction)>2:
+            for _ in osu_instruction[2:]:
+                _[0].replace('-','')
+                osu_instruction[1]+=' -{} {}'.format(_[0:1],_[1:])
+        
+        
+        if len(comline_args) < 2 or comline_args[1]=='all':
+            get_cfg(osu_instruction[0])
+            return bench_run(tag_id_switcher(osu_instruction[0]),'all',osu_instruction[1])                                       
+        
+        else:            
+            get_cfg(osu_instruction[0],comline_args[1])
+            return bench_run(tag_id_switcher(osu_instruction[0]),comline_args[1],osu_instruction[1])
 
     
 
@@ -649,7 +737,6 @@ def error_log(txt='', local_table={}, exc_info=''):
                     
                     if len(str(_[0]))+len('['+str(i)+'.] ')>maxlength:
                         maxlength = len(str(_[0]))+len('['+str(i)+'.] ')
-
                 
                 for n in range(len(local_scale)):
                     local_scale[n] = (maxlength//8)-local_scale[n]
@@ -782,7 +869,7 @@ def code_eval(expr):
 def config_cut(line):
     c = line.find("[")
     if(c!=-1):
-        line = line[:c]
+        line = line[:c]   
     return line.strip()
 
 def function_check(name):
@@ -826,7 +913,7 @@ def clear():
 # parameter x   [a]         ->    parameter x   [a]   
 # parameter y    [b]        ->    parameter y   [b]
 #blocks <=> how many ------- separator lines do we expect? (that's a safeguard for individual scripts at the end of profiles)  
-def normalise_config(name, scale=12, blocks=5, tabs=False, tabsize=8):
+def normalise_config(name, scale=0, blocks=5, tabs=False, tabsize=8):
     param_names = []
     param_values = []
     connection = []
@@ -883,7 +970,7 @@ def install_spack(pth):
     shell(cmd)
     SPACK_XPTH=pth 
     file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
-    menutxt+=FCOL[15]+'<info>    '+FEND+'spack was installed to following location:'+'\n          '+FCOL[15]+inst_pth+FEND
+    menutxt+=FCOL[15]+'\n<info>    '+FEND+'spack was installed to following location:'+'\n          '+FCOL[15]+inst_pth+FEND
 
 def spack_errorcheck():
     global menutxt, spack_problem
@@ -1036,6 +1123,7 @@ def get_target_path(spec):
 #Erwartet: Argumentliste zu -r/-i und der Benchname (String)
 def farg_to_list(farg, bench):
     names = farg.split(',')
+    
     for e in names:
         _ = str(e).find('-')
         #Umwandeln von Bindestrichnotation zu konkreten Zahlen: 3-5 -> 3 4 5
@@ -1049,10 +1137,13 @@ def farg_to_list(farg, bench):
     for e in names:
         #print('farg-to-list:'+str(names[names.index(e)]))
         names[names.index(e)] = bench+'_cfg_'+str(e)+'.txt'
+    
+    
     return names
 
-def write_slurm_params(profile, type,block):
+def write_slurm_params(profile, block):
     global menutxt
+
     #Shebang
     txt='#!/bin/bash\n'
     #Partition
@@ -1106,6 +1197,7 @@ def delete_dir(pth):
     shutil.rmtree(pth)
 
 def clean(inpt = 'all'):
+    global check_data_t, initm, mr, ml, colour_support, refresh_intervall, form_factor_menu ,LOC
     pth = LOC
     rtxt = ''
     if inpt=='log' or inpt=='all':
@@ -1120,13 +1212,19 @@ def clean(inpt = 'all'):
             rtxt+=FCOL[6]+'there was no log-file to be found:\na new one was created!\n'+FEND
         else:
             shell('rm {}/mem.txt'.format(LOC))
-        txt='---------Param. stehen in eckigen Klammern---------'
-        txt+='\nform_factor_menu\t\t\t[3]'
+        txt='-------------------program settings-------------------'
+        txt+='\n---------------direct input or via menu---------------'
+        txt+='\nform_factor_menu\t\t\t[12]'
         txt+='\nrefresh_intervall\t\t\t[0]'
         txt+='\ncolour_support\t\t\t[0]'
         txt+='\ndebug_mode\t\t\t[0]'
-        txt+='\n--------------------Zeitmessung--------------------'
-        txt+='\n---------------automatische Eingaben---------------'
+        txt+='\ninfo_feed\t\t\t[0]'
+        txt+='\ntermination_logging\t\t\t[0]'
+        txt+='\npath_logging\t\t\t[0]'
+        txt+='\nauto_space_normalization\t\t\t[0]'
+        txt+='\ncheck_python_setting\t\t\t[1]'
+        txt+='\n------------------last boot up stats------------------'
+        txt+='\n----------------no intended user input----------------'
         txt+='\nevaluate_paths\t\t\t[]'
         txt+='\nprepare_array\t\t\t[]'
         txt+='\ncheck_data\t\t\t[]'
@@ -1134,12 +1232,18 @@ def clean(inpt = 'all'):
         txt+='\nget_cfg\t\t\t[]'
         txt+='\ncreate_mem\t\t\t[]'
         file_w('{}/mem.txt'.format(LOC), txt, 'a')
-        form_factor_menu = int(get_mem_digit(1))
+        initm+='program settings (mem.txt) were created ...\n'
+        form_factor_menu = int(get_mem_digit(2))
         refresh_format_params()
-        refresh_intervall = int(get_mem_digit(2))
-        colour_support = int(get_mem_digit(3))
+        refresh_intervall = int(get_mem_digit(3))
+        colour_support = int(get_mem_digit(4))
         color_check()
-        debug_mode_switch(int(get_mem_digit(4)))
+        mode_switch('dbg', int(get_mem_digit(5)))
+        mode_switch('info_feed', int(get_mem_digit(6)))
+        mode_switch('termination_logging',int(get_mem_digit(7)))
+        mode_switch('path_logging',int(get_mem_digit(8)))
+        mode_switch('auto_space_normalization',int(get_mem_digit(9)))
+        mode_switch('check_python_setting',int(get_mem_digit(10)))
     if inpt=='projects' or inpt=='all':    
         if os.path.isdir(pth+'/projects')==False:
             rtxt+=FCOL[6]+'there was no /projects directory to be found!\n'+FEND
@@ -1312,7 +1416,6 @@ def avail_pkg(id):
             pkg_info[id][1] = ''
             pkg_info[id][2] = ''
             return rlist
-
         if avl==full:
             pkg_info[id][0] = FCOL[5]+str(avl)+FEND+'/'+str(full)+FORM[1]+' avl. '+FEND
         elif avl!=0:
@@ -1358,6 +1461,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
     
     selected_profiles = cfg_profiles[bench_id].copy()
     
+    
     #Die Liste der Namen der verfügbaren Profile
     avail_names = get_cfg_names(pth, tag)
     #Die Liste der Namen der nicht verfügbaren Profile
@@ -1373,6 +1477,8 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
             names = get_cfg_names(pth, tag)
         else:
             names = farg_to_list(farg, tag)
+        
+        
 
         #indices list for profiles not corresponding to our current run
         dlist=[]
@@ -1428,8 +1534,7 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
         for name in unselected_names:
             menutxt+=FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
         for name in unavail_names:
-            menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'    
-            
+            menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'   
     
     #Skriptbau, ggf. mit zusätzlichen Argumenten
     if extra_args!='':
@@ -1464,6 +1569,9 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     #for no iterations this value will be incremented up to len(selected_profiles)
     dependency_offset = 0
     
+    #counts desleceted profiles
+    num_deselected = 0
+    
     #Namen der Auftragsordner
     run_dir='{}/{}_run@{}/'.format(PROJECT_PTH,tag,t_id)
     res_dir='{}/{}_res@{}/'.format(PROJECT_PTH,tag,t_id)
@@ -1472,29 +1580,44 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
         shell('mkdir -p '+run_dir[:-1])
     if os.path.isdir(res_dir[:-1])==False:     
         shell('mkdir -p '+res_dir[:-1])
-    
+        
     #Bauen des Batch-Skripts, anhand der Parameter aus der allgemeinen Config
-    batchtxt=write_slurm_params(cfg_profiles[0][0], 'batchscript',3)
+    batchtxt=write_slurm_params(cfg_profiles[0][0],3)
     batchtxt+='#SBATCH --job-name='+tag+'_run'+'@'+t_id+'\n'
     batchtxt+='#SBATCH --output=/dev/null\n'
     batchtxt+='#SBATCH --error='+run_dir+'batch.err\n\n'
     
     #individual jobscripts
     for profile in selected_profiles:
-    
+        
         if os.path.isdir(res_dir+profile[0][0][:-4])==False:     
             shell('mkdir -p '+res_dir+profile[0][0][:-4])        
         
         #profile [1] <=> meta-settings [0] <=> first entry: how many iterations are disired?
         num = int(profile[1][0])
-    
+        
+        if profile[0][2]=='no path found!':
+            num_deselected+=1
+            continue
+        
         #different profiles might use the same package during the same run, so we have to update the benchmark-parameters
         for params in TRANSFER_PARAMS:
-            if tag_id_switcher(bench_id) == params[0]:
-                batchtxt+='python3 '+CONFIG_TO_DAT_XPTH+' '+profile[0][1]+' '+profile[0][2]+'/'+params[3]+' '+str(params[1])+' '+str(params[2])+'\n'
+            if tag_id_switcher(bench_id) == params[0]:                
+                _='python3 '+CONFIG_TO_DAT_XPTH+' '+profile[0][1]+' '+profile[0][2]+'/'+params[3]+' '+str(params[1])+' '+str(params[2])+'\n'              
                 
-        if profile[0][2]=='no path found!':
-            continue      
+                if first_job:
+                    first_job=False
+                    batchtxt+='id'+str(dependency_offset)+'=$(sbatch '
+                    dependency_offset+=1
+                else:
+                    batchtxt+='id'+str(dependency_offset)+'=$(sbatch --dependency=afterany:${id'+str(dependency_offset-1)+'##* } '
+                    dependency_offset+=1
+                    
+                if selected_profiles.index(profile)==(len(selected_profiles)-1-num_deselected):
+                    batchtxt+=build_config_to_dat_script(_,profile[0][0][:-4],run_dir,True)+')\n'                
+                else:
+                     batchtxt+=build_config_to_dat_script(_,profile[0][0][:-4],run_dir,False)+')\n'
+              
         
         #(1) we're building a dependency-chain for every queued profile *and* with possible iterations in mind!
         #(2) we don't need to transfer parameter between different iterations since they're adjacent in the dependency-chain
@@ -1533,8 +1656,7 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
     shell('chmod +x '+run_dir+'batch.sh')
     return run_dir+'batch.sh' 
 
-def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
-
+def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):    
     """ 
     >>>>>   script building pipeline (3/5)           <<<<
     >>>>>   job-script design according to           <<<<
@@ -1571,18 +1693,18 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
     else:
         bin_path = ''
     #Im fünften Config-Block eines Profils steht potentiell ein händisch gebautes Skript     
-    if len(profile[5])==0:
-        jobtxt=write_slurm_params(profile, 'jobskript',4)
+    if  len(profile[-1:][0])==0:               
+        jobtxt=write_slurm_params(profile,len(profile)-2)
         #Jobname (<=> Profilname)
         jobtxt+='#SBATCH --job-name={}\n'.format(num_workaround+shortened_name)
         #Ziel für Output (sollte in (...)[results] landen)
-        if profile[4][10]=='' and bench_id != HPCG_ID:
+        if profile[len(profile)-2][10]=='' and bench_id != HPCG_ID:
             jobtxt+='#SBATCH --output={}\n'.format(res_dir+shortened_name+'/'+num_workaround+shortened_name+'.out')
         #Output wird für hpcg manuell in execute_line() gehandelt
         if bench_id == HPCG_ID:
             jobtxt+='#SBATCH --output=/dev/null\n'
         #Ziel für Fehler (sollte in (...)[results] landen)
-        if profile[4][11]=='':
+        if profile[len(profile)-2][11]=='':
             jobtxt+='#SBATCH --error={}\n'.format(res_dir+shortened_name+'/'+num_workaround+shortened_name+'.err')
         jobtxt+='\n'
         #Sourcen von spack   
@@ -1591,12 +1713,12 @@ def build_job(profile, bench_id, run_dir, res_dir, num=0, extra_args = ''):
         jobtxt+= 'spack load {}\n'.format(profile[0][3])   
         jobtxt+='\n'
         #Skriptzeile in der eine Binary ausgeführt wird
-        jobtxt+=execute_line(bench_id, bin_path, profile[4][1], profile[4][2], extra_args, res_dir+num_workaround+shortened_name+'/'+num_workaround+shortened_name+'.out', res_dir+num_workaround+shortened_name)
+        jobtxt+=execute_line(bench_id, bin_path, profile[len(profile)-2][1], profile[len(profile)-2][2], extra_args, res_dir+num_workaround+shortened_name+'/'+num_workaround+shortened_name+'.out', res_dir+num_workaround+shortened_name)
         #TODO: Entladen von Modulen, nötig? Das ist ja ein abgeschlossenes Jobscript...
         #jobtxt+= 'spack unload {}\n'.format(profile[0][3])
     else:
-        for i in range(len(profile[5])):
-            jobtxt+=profile[5][i]
+        for i in range(len(profile[-1:][0])):
+            jobtxt+=profile[-1:][0][i]
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
     if os.path.isdir(run_dir[:-1])==True:
@@ -1629,6 +1751,7 @@ def execute_line(bench_id, bin_path, node_count, proc_count, extra_args, output,
         txt+='cd {}'.format(res_dir[:res_dir.rfind('/')+1]+res_dir[res_dir.rfind('#')+1:])+'\n'
         txt+='mpirun -np {pcount} {bpath}xhpcg; '.format(pcount = proc_count, bpath = bin_reference)
         txt+='mv HPCG*.txt {}.out; mv hpcg*T*.txt hpcg_meta@{}.txt'.format(output[output.rfind('/')+1:-4],output[output.rfind('/')+1:-4])
+    
     return txt
 
 def build_plot(t_id, bench,run_dir):
@@ -1639,10 +1762,10 @@ def build_plot(t_id, bench,run_dir):
     >>>>>   individual handling per benchmark        <<<<
     """
 
-    jobtxt=write_slurm_params(cfg_profiles[0][0], 'plotskript',3)
+    jobtxt=write_slurm_params(cfg_profiles[0][0],3)
     jobtxt+='#SBATCH --job-name='+bench+'_plot\n' 
-    jobtxt+='#SBATCH --error='+run_dir+'plot.err\n\n'   
-    jobtxt+='#SBATCH --output=/dev/null\n\n'   
+    jobtxt+='#SBATCH --error='+run_dir.replace('run','res')+'plot.err\n'   
+    jobtxt+='#SBATCH --output='+run_dir.replace('run','res')+'plot.err\n\n'   
     jobtxt+= 'python3 {}/plot.py '.format(LOC)+t_id+' '+bench
     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads
@@ -1651,7 +1774,27 @@ def build_plot(t_id, bench,run_dir):
         shell('chmod +x '+run_dir+'plot.sh')
     return run_dir+'plot.sh'
 
+def build_config_to_dat_script(txt,name,run_dir,is_last=False):
+  
+    """ 
+    >>>>>   script building pipeline (2.1/5)         <<<<
+    >>>>>   update dat parameters                    <<<<
+    """
 
+    jobtxt=write_slurm_params(cfg_profiles[0][0],3)
+    jobtxt+='#SBATCH --job-name=cfg_to_dat#{}\n'.format(name) 
+    jobtxt+='#SBATCH --error=/dev/null\n\n'  
+    jobtxt+='#SBATCH --output=/dev/null\n\n'   
+    jobtxt+= txt+'\n'
+    
+    if is_last:
+        jobtxt+='rm {}cfg_to_dat*.sh'.format(run_dir)
+        
+    if os.path.isdir(run_dir[:-1])==True:
+        file_w('{}cfg_to_dat_{}.sh'.format(run_dir,name),jobtxt,'a')
+        shell('chmod +x {}cfg_to_dat_{}.sh'.format(run_dir,name))
+    
+    return '{}cfg_to_dat_{}.sh'.format(run_dir,name)
 
 
 #Installation
@@ -1868,7 +2011,7 @@ def print_options_menu(txt = ''):
     print(ml+'(10)'+mr+' dis-/enable termination logging')
     print(ml+'(11)'+mr+' dis-/enable path logging')
     print(ml+'(12)'+mr+' dis-/enable whitespace normalization (configs)')
-    
+    print(ml+'(13)'+mr+' dis-/enable python installation check')
     
     print(' ')
     print(menutxt.replace('\n','\n'+ml)+'\n'+str(txt))
@@ -1976,6 +2119,15 @@ def options_menu():
                 mode_switch('auto_space_normalization', 1)
                 file_w('{}/mem.txt'.format(LOC),'auto_space_normalization\t\t\t[1]',9)
                 print_options_menu(FCOL[4]+'done!'+FEND+FORM[1]+' ...whitespace normalization mode on'+FEND)
+        elif opt == '13':
+            if check_python_setting==True:
+                mode_switch('check_python_setting', 0)
+                file_w('{}/mem.txt'.format(LOC),'check_python_setting\t\t\t[0]',10)
+                print_options_menu(FCOL[4]+'done!'+FEND+FORM[1]+' ...python check mode off'+FEND)
+            else:
+                mode_switch('check_python_setting', 1)
+                file_w('{}/mem.txt'.format(LOC),'check_python_setting\t\t\t[1]',10)
+                print_options_menu(FCOL[4]+'done!'+FEND+FORM[1]+' ...python check mode on'+FEND)
         
         else:
             print_hpl_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option »(n) ...« use the corresponding integer »input:n« ')
@@ -2012,7 +2164,7 @@ def osu_menu():
             return 0
         elif opt == '1' or opt == 'run':
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to run?\n\n'+FEND
-            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
+            txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n'+ml+'e.g. valid input: »1-3,test,9 latency«\n'+ml+'     inst. abort: »cancel«\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'color-coding: \n'+FEND+FCOL[0]+ml+'green \t\t\t\t<=> \tinstalled \n'+ml+'yellow \t\t\t\t<=> \tmissing \n'+ml+'red \t\t\t\t\t<=> \terror '+FORM[1]+'(e.g. invalid specs etc.) '+FEND
             txt+='\n\n'+ml+FCOL[15]+'--- found {} profiles ---'.format(tag_id_switcher(OSU_ID))+FEND+'\n'+ml
             left_size=t_width-len(ml)
@@ -2025,11 +2177,15 @@ def osu_menu():
             if spack_problem!='':
                 txt+='\n\n'+ml+FCOL[6]+'<warning> '+FEND+'no availability information!\n'+ml+'          reason: {}\n'.format(spack_problem)+'          '+ml+FCOL[6]+SPACK_XPTH+FEND
             print_osu_menu(txt)
-            expr=input_format()
+            expr=input_format().split()            
+            if len(expr)<2:
+                txt+='Invalid input, maybe You forgot test-type e.g. latency'                
+                print_osu_menu(txt)
             if expr=='cancel':
                 clear()
                 return 0
-            scr_pth = bench_run(OSU_ID, expr.replace(' ',''))
+            print(expr[0].replace(' ',''))
+            scr_pth = bench_run(OSU_ID, expr[0].replace(' ',''),expr[1])
             print_osu_menu('')
         elif opt == '2' or opt == 'view':
             print_osu_menu(view_installed_specs(tag_id_switcher(OSU_ID)))
@@ -2282,6 +2438,9 @@ def get_mem_digit(pos):
         error_log('') 
 """
         
+
+
+
 """
 Main Initialization
 """
@@ -2377,6 +2536,8 @@ cfg_profiles = [[],[],[],[]]
 #Pfade zu den Benchmarks (Index <=> Benchmark-ID; Ersteintrag führt zur allg. config!)
 BENCH_PTHS = []
 
+#python will check per default
+#check_python_setting = True
 
 #############################
 #####  important paths  #####
@@ -2399,8 +2560,17 @@ try:
 
     #from what root do we look for spack installations?
     SPACK_SEARCH_ROOT = config_cut(file_r(BENCH_PTHS[MISC_ID]+'config.txt', 5)).rstrip()
-
+    
+    prepare_array()
+    
+    get_cfg(tag_id_switcher(MISC_ID))
+    
+    #should python installation be checked 
+    check_data()
+    check_python_setting=int(get_mem_digit(10))
     extensive_spack_evaluation()
+    
+    
 
     #where do want our results to be stored in?
     PROJECT_PTH=str(file_r(BENCH_PTHS[MISC_ID]+'config.txt', 6)).rstrip()
@@ -2443,13 +2613,14 @@ try:
     refresh_intervall = int(get_mem_digit(3))
     #whether we support colored output
     colour_support = int(get_mem_digit(4))
-    color_check()
+    color_check()    
+        
     #these might help to regulate excessive logging
     mode_switch('dbg', int(get_mem_digit(5)))
     mode_switch('info_feed', int(get_mem_digit(6)))
     mode_switch('termination_logging',int(get_mem_digit(7)))
     mode_switch('path_logging',int(get_mem_digit(8)))
-    mode_switch('auto_space_normalization',int(get_mem_digit(9)))
+    mode_switch('auto_space_normalization',int(get_mem_digit(9)))    
 except Exception as exc:
     error_log('failed to read settings from: '+LOC+'mem.txt', locals(), traceback.format_exc())
     initm+='\n'+ml+FCOL[6]+'<warning> '+FEND+'failed to read settings from: '+LOC+'mem.txt'
@@ -2459,10 +2630,10 @@ except Exception as exc:
 #############################
 
 clean_dummy_projects()
-prepare_array()
-check_data()
+#prepare_array()
+#check_data()
 check_dirs()
-get_cfg(tag_id_switcher(MISC_ID))
+#get_cfg(tag_id_switcher(MISC_ID))
 
 #relevant for better indentation in menu functions 
 MAX_TAG_L = 0
@@ -2474,8 +2645,9 @@ MAX_TAG_L = 0
 init_t = time.time()-init_t
 
 
-def main():
+def main():    
     cl_arg()
+
     
 if __name__ == "__main__":
     main()
