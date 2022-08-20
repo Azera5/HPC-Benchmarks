@@ -2,7 +2,7 @@
 3					[iterations]
 avg					[aggregation: e.g. avg, max]
 ------------------base dependencies------------------
-2.9							[HPL Version]
+@							[HPL Version]
 gcc							[Compiler]
 12.1.0						[Compiler Version]
 openmpi						[MPI Implementierung]
