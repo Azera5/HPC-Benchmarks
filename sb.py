@@ -202,7 +202,7 @@ def cl_arg():
         print(menutxt)
         #we're submitting our scripts
         if pth!='-1':
-            print(shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3])))
+            print(FCOL[4]+shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3]))+FEND)
 
     #this mode *only* writes the scripts
     if args.write:
@@ -546,14 +546,24 @@ def get_cfg(bench,farg='all'):
         names = get_cfg_names(get_cfg_path(bench), bench)
     else:
         names = farg_to_list(farg,bench)
+        
+        for n in names:
+            if os.path.isfile(get_cfg_path(bench)+n)==False:
+                del names[names.index(n)]
+                error_log('»'+get_cfg_path(bench)+n+'« doesn\'t exist!')
         cfg_profiles[id]=cfg_profiles[id][:len(names)]    
 
     
     #for each profile
     for p in names:
         block = 1
-        txtfile = open(get_cfg_path(bench)+p, 'r')
-        txtlist = txtfile.readlines()
+        try:
+            txtfile = open(get_cfg_path(bench)+p, 'r')
+            txtlist = txtfile.readlines()
+        except Exception as exc:
+                error_log('can\'t load »'+get_cfg_path(bench)+p+'«', locals(), traceback.format_exc())
+                progressbar(names.index(p)+1, len(names))
+                continue
         test=''
         #inserts each row accordingly
         for ln in txtlist:                
@@ -621,7 +631,7 @@ def find_matplot_python_hash():
         py=shell('find '+pth_spack+' -name python | grep bin').split('\n')
         count=len(py)-1
         #Eine Pythonversion vorhanden
-        if  count==1:
+        if count==1:
             print(shell(sourcen+'spack load python; python -m pip install matplotlib'))
             return ''
             
@@ -631,7 +641,7 @@ def find_matplot_python_hash():
         else:
             py=py[0][py[0].find('python-')+7:py[0].find('/bin')]
             py_hash=py[py.find('-')+1:]
-            print(shell(sourcen+'spack load python /'+py_hash+'; python -m pip install matplotlib'))
+            u=shell(sourcen+'spack load python /'+py_hash+'; python -m pip install matplotlib')
             return '/'+py_hash
             
     #Matplotlib ist installiert 
@@ -745,7 +755,13 @@ def error_log(txt='', local_table={}, exc_info=''):
                     _ = list(tuple)
                     i+=1
                     local_varname.append(str(_[0]))
-                    local_varvalue.append(str(_[1]))
+                    
+                    #very long values are left out, from our perspective printing hunderts of characters just for one variable harms the debugging more than it helps
+                    if len(str(_[1]))>100:
+                        local_varvalue.append('var-value left out: '+str(len(str(_[1])))+'characters')
+                    else:
+                        local_varvalue.append(str(_[1]))
+                    
                     local_varnumber.append('['+str(i)+'.] ')
                     local_scale.append((len(str(_[0]))+len('['+str(i)+'.] '))//8)
                     
@@ -1562,20 +1578,32 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
             menutxt+=FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
         for name in unavail_names:
             menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'
-        for arg_name in farg:
-            full_name = tag_id_switcher(id)+'_cfg_'+arg_name+'.txt'
-            if full_name not in avail_names:
-                menutxt+=FCOL[6]+full_name+ml+'(does not exist)'+FEND+'\n'
+        for arg_name in names:
+            if arg_name not in avail_names:
+                menutxt+=FCOL[7]+arg_name+ml+'(does not exist)'+FEND+'\n'
+    
+    if dbg and menu_ctrl==False:
+        names = farg_to_list(farg, tag)
+        menutxt+='\n\n'+FCOL[15]+'--- '+'summary'+' ---'+FEND+'\n\n'
+        for arg_name in names:
+            if arg_name not in avail_names:
+                menutxt+=FCOL[7]+arg_name+ml+'(does not exist)'+FEND+'\n'
+            else:
+                del avail_names[avail_names.index(arg_name)]
+        for name in unavail_names:
+            menutxt+=FCOL[6]+name+ml+'(deselected)'+FEND+'\n'
+        for name in avail_names:
+            menutxt+=FCOL[0]+name+ml+'(unselected)'+FEND+'\n'
     
     #Skriptbau, ggf. mit zusätzlichen Argumenten
     if extra_args!='':
         skript=build_batch(selected_profiles, bench_id, extra_args)
         menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n'+'\n'
-        menutxt+='\n'+shell('sbatch '+skript)
+        #menutxt+='\n'+shell('sbatch '+skript)
     else:
         skript=build_batch(selected_profiles, bench_id)
         menutxt+='\n'+FCOL[4]+'script building completed:\n'+FEND+FORM[0]+FCOL[3]+skript+FEND+'\n'+'\n'
-        menutxt+='\n'+shell('sbatch '+skript)
+        #menutxt+='\n'+shell('sbatch '+skript)
       
     return skript
 
@@ -2070,7 +2098,7 @@ def menu():
             print_menu(r)
         elif opt[0] == '$':
             r = str(shell(opt[1:]))
-            print_menu(FBGR[14]+'stdout:'+FEND+'\n'+r)
+            print_menu(FCOL[15]+'- - - stdout - - -'+FEND+'\n'+r)
         else:
             print_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option »(n) ...« use the corresponding integer »input:n« ')   
 
@@ -2238,7 +2266,8 @@ def print_osu_menu(txt = ''):
     #angesammelte Nachrichten leeren...
     menutxt='\n'
 
-def osu_menu():    
+def osu_menu():
+    global menutxt
     print_osu_menu()
         
     while True:
@@ -2271,7 +2300,8 @@ def osu_menu():
                 return 0
             print(expr[0].replace(' ',''))
             scr_pth = bench_run(OSU_ID, expr[0].replace(' ',''),expr[1])           
-            print_osu_menu('\n\n'+shell('sbatch {}'.format(scr_pth)))
+            menutxt+='\n'+FCOL[4]+shell('sbatch {}'.format(scr_pth))+FEND
+            print_osu_menu('')
         elif opt == '2' or opt == 'view':
             print_osu_menu(view_installed_specs(tag_id_switcher(OSU_ID)))
         elif opt == '3'or opt == 'install':           
@@ -2326,7 +2356,8 @@ def print_hpl_menu(txt = ''):
     print(menutxt.replace('\n','\n'+ml)+str(txt))
     menutxt='\n'
 
-def hpl_menu():    
+def hpl_menu():
+    global menutxt
     print_hpl_menu()
         
     while True:
@@ -2354,6 +2385,7 @@ def hpl_menu():
                 clear()
                 return 0
             scr_pth = bench_run(HPL_ID, expr.replace(' ',''))
+            menutxt+='\n'+FCOL[4]+shell('sbatch {}'.format(scr_pth))+FEND
             print_hpl_menu('')
         elif opt == '2' or opt == 'view':
             print_hpl_menu(view_installed_specs(tag_id_switcher(HPL_ID)))
@@ -2409,7 +2441,8 @@ def print_hpcg_menu(txt = ''):
     print(menutxt.replace('\n','\n'+ml)+str(txt))
     menutxt='\n'
 
-def hpcg_menu():    
+def hpcg_menu():
+    global menutxt
     print_hpcg_menu()
         
     while True:
@@ -2437,6 +2470,7 @@ def hpcg_menu():
                 clear()
                 return 0
             scr_pth = bench_run(HPCG_ID, expr.replace(' ',''))
+            menutxt+='\n'+FCOL[4]+shell('sbatch {}'.format(scr_pth))+FEND
             print_hpcg_menu('')
         elif opt == '2' or opt == 'view':
             print_hpcg_menu(view_installed_specs(tag_id_switcher(HPCG_ID)))
