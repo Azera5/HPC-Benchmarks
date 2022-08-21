@@ -12,7 +12,7 @@ import argparse
 import glob
 from os.path import exists 
 from argparse import RawTextHelpFormatter
-from plot import read_values, aggregate_results, values, label_token, append_count
+from plot import read_values, clean_values, values
 
 #debugging
 import sys
@@ -201,7 +201,8 @@ def cl_arg():
         #possible warnings etc.
         print(menutxt)
         #we're submitting our scripts
-        if pth!='-1':
+        """
+        if pth!='-1':        
             print(FCOL[4]+shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3]))+FEND)
 
     #this mode *only* writes the scripts
@@ -1926,43 +1927,78 @@ def install_spec(expr):
         return ''
         
 def show_highlights(func, res_id='', bench_tag='', count=1):
-    try:
-        if res_id == '' or bench_tag == '':
-            finished_benchs=check_finished_results(bench=bench_tag)
-            print('test')
-            if len(finished_benchs)>1:                
-                txt='\n(0)  cancel'
-                for res in finished_benchs:
-                    pos=res[:res.find('@')].rfind('/')
-                    txt+='\n({})  {}'.format(str(finished_benchs.index(res)+1),res[pos+1:-8])
+    try: 
+        clean_values()
+        #no specific result_ID
+        if res_id == '':
+            finished_benchs=check_finished_results(bench=bench_tag)           
+            print_finished_results(finished_benchs)             
+            while True: 
+                answer=input_format()                    
+                if int(answer) > (len(finished_benchs)):
+                    clear()
+                    print_finished_results(finished_benchs,FCOL[9]+'invalid input'+FEND+': to select option »(n) ...« use the corresponding integer »input:n«')
+                    continue
                     
-                print('\n'+ml+FCOL[13]+FORM[0]+'which result do you wish to show?\n\n'+FEND)
-                print(txt)
-                
-                while True: 
-                    answer=input_format()
-                    
-                    for i in range (0,len(finished_benchs),1):
-                        if answer == 0:
-                            return
-                        elif answer == i:
+                else:
+                    for i in range (0,len(finished_benchs)+1,1):
+                        if int(answer) == 0:
+                            return ''
+                        elif int(answer) == i:
                             res=finished_benchs[i-1]
-                            res_id=res[res.find('@')+1:-8]
+                            res_id=res[res.find('@')+1:-9]
                             pos=res[:res.find('@')].rfind('/')
-                            bench_tag=res[pos+1:res.find('_')-1]
-                            values=read_values(res_id,bench_tag)
-                    
-                    print(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option »(n) ...« use the corresponding integer »input:n«')
-                    
-            res_id = check_finished_results()
-            bench_tag = check_finished_results()[1]
+                            bench_tag=res[pos+1:res.find('_')]                            
+                    break                    
+                clear()
+                print_finished_results(finished_benchs)
         
-        values=read_values(res_id,bench_tag)
-    
+        elif bench_tag=='':
+            finished_benchs=glob.glob('{}/projects/{}*res@{}/plot.out'.format(LOC,bench,res_id))
+            res=finished_benchs[0]
+            pos=res[:res.find('@')].rfind('/')
+            bench_tag=res[pos+1:res.find('_')]
+        
+        _=read_values(res_id,bench_tag)
+        label_pos=2
+        
+        #length of decimal places
+        decimal=6
+        #formats number length
+        max_len=max([len(str(int(max(i[0][1])))) for i in _[1]])+decimal+1
+        
+        if _[0][2]=='':
+                label_pos=1
+        
+       
+        if func=='max': 
+            values=[[str('{:{}.{}f}'.format(max(i[0][1]),max_len,decimal))+' ['+_[0][label_pos]+']',i[0][2][1:i[0][2].find(')')]] for i in _[1]]
+        
+        elif func=='min':
+            values=[[str('{:{}.{}f}'.format(min(i[0][1]),max_len,decimal))+' ['+_[0][label_pos]+']',i[0][2][1:i[0][2].find(')')]] for i in _[1]]
+                    
+        
+        print([max(i[0][1]) for i in _[1]])
+        
+        return(draw_table(values[:count],t_width,0,0.9,'Highlights ({})'.format(func)))       
+       
     except Exception as exc:     
         error_log('', locals(), traceback.format_exc())
 
-
+def print_finished_results(res_list,txt_=''):
+    txt='\n'+ml+FCOL[15]+'<info>'+FEND+ml+'some benchmarks are finished: which result do you wish to inspect??'
+    txt+='\n      '+ml+ml+FCOL[0]+'results are sorted by their complition time (newest projects first)\n\n'+FEND
+    txt+='      {}(0){} skip'.format(ml+ml+ml,mr)   
+    for res in res_list:        
+        pos=res[:res.find('@')].rfind('/')
+        txt+='\n      {}({}){} {}'.format(ml+ml+ml,str(res_list.index(res)+1),mr,res[pos+1:-9])
+    
+    if txt_!='':
+        txt+='\n\n      '+ml+ml+txt_
+        
+    print(txt)
+    
+    
 #returns a list of finished benchmarks
 def check_finished_results(selected='new',bench=''):
     try:
@@ -1999,6 +2035,7 @@ def print_menu(txt = ''):
     print(FEND+ml+'(0)'+mr+' Exit')
     print(ml+'(1)'+mr+' Options')
     print(ml+'(2)'+mr+' Info')
+    print(ml+'(3)'+mr+' View finished runs')
     if (refresh_intervall!=0 and ((time.time()-print_menu.updatetime)>refresh_intervall or print_menu.updatetime==0)) or get_info:
         opt_lines=''
         try:         
@@ -2008,19 +2045,19 @@ def print_menu(txt = ''):
                 if (function_check(tag_id_switcher(id)+'_menu') and function_check('print_'+tag_id_switcher(id)+'_menu'))!=True:
                     implementation_status = ' '*(int(MAX_TAG_L-len(tag_id_switcher(id))))+FCOL[9]+'--- no menu implementation --- '+FEND
                     get_info = False
-                    opt_lines+=ml+'({})'.format(id+2)+mr+' {}'.format(tag_id_switcher(id)).upper()+implementation_status+'\n'
+                    opt_lines+=ml+'({})'.format(id+3)+mr+' {}'.format(tag_id_switcher(id)).upper()+implementation_status+'\n'
                 else:
                     implementation_status = ' '*(int(MAX_TAG_L-len(tag_id_switcher(id))))
                     avail_pkg(id)
                     get_info = False
-                    opt_lines+=ml+'({})'.format(id+2)+mr+' {}'.format(tag_id_switcher(id)).upper()+implementation_status+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+'\n'
+                    opt_lines+=ml+'({})'.format(id+3)+mr+' {}'.format(tag_id_switcher(id)).upper()+implementation_status+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+'\n'
             print(opt_lines[:-1])
         except Exception as exc:
             error_log('', locals(), traceback.format_exc())
             for id in range(len(BENCH_ID_LIST)):
                 if id==MISC_ID:
                     continue
-                print(ml+'({})'.format(id+2)+mr+' {}'.format(tag_id_switcher(id)).upper()+' '*(int(MAX_TAG_L-len(tag_id_switcher(id))))+'... package information refresh failed')               
+                print(ml+'({})'.format(id+3)+mr+' {}'.format(tag_id_switcher(id)).upper()+' '*(int(MAX_TAG_L-len(tag_id_switcher(id))))+'... package information refresh failed')               
     else:
         for id in range(len(BENCH_ID_LIST)):
             if id==MISC_ID:
@@ -2030,10 +2067,10 @@ def print_menu(txt = ''):
             else:
                 implementation_status = ' '*(int(MAX_TAG_L-len(tag_id_switcher(id))))
             if pkg_info[id][0]!='empty':
-                print(ml+'({})'.format(id+2)+mr+' {}'.format(tag_id_switcher(id)).upper()+implementation_status+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+' {}s ago'.format(int(time.time()-pkg_info[id][3])))
+                print(ml+'({})'.format(id+3)+mr+' {}'.format(tag_id_switcher(id)).upper()+implementation_status+pkg_info[id][0]+pkg_info[id][1]+pkg_info[id][2]+' {}s ago'.format(int(time.time()-pkg_info[id][3])))
             else:
-                print(ml+'({})'.format(id+2)+mr+' {}'.format(tag_id_switcher(id)).upper()+implementation_status)           
-    print(ml+'({})'.format(len(BENCH_ID_LIST)+2)+mr+' Errors '+check_err_stack())
+                print(ml+'({})'.format(id+3)+mr+' {}'.format(tag_id_switcher(id)).upper()+implementation_status)           
+    print(ml+'({})'.format(len(BENCH_ID_LIST)+3)+mr+' Errors '+check_err_stack())
     if dbg:
         info='\n'
         info+=FCOL[15]+'subshell-use   '+FEND+'<=> '+FCOL[15]+'$'+FEND+FCOL[7]+'»cmd«                              '+FCOL[0]+'(Debugging)'+FEND+'\n'
@@ -2082,15 +2119,18 @@ def menu():
                     menutxt+=FCOL[15]+'<info>    '+FEND+'currently used spack binary:   '+FCOL[6]+SPACK_XPTH[:-10]+FEND+'\n'
                     menutxt+=FCOL[6]+'<warning> '+FEND+'{}\n'.format(spack_problem)
             print_menu('')
-        elif opt.isdigit() and int(opt)>2 and int(opt)<=len(BENCH_ID_LIST)+1:
+        elif opt == '3' or opt == 'View finished runs':
+            print_finished_runs_menu()  
+            
+        elif opt.isdigit() and int(opt)>3 and int(opt)<=len(BENCH_ID_LIST)+2:
             #-2 ist der Offset der die Positionen 'Option' und 'Info' ausgleicht
             try:
-                func = globals()['{}_menu'.format(tag_id_switcher(int(opt)-2))]
+                func = globals()['{}_menu'.format(tag_id_switcher(int(opt)-3))]
                 func()
                 print_menu()
             except KeyError:
                 print_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': this is option is not implemented!')            
-        elif opt == str(len(BENCH_ID_LIST)+2):
+        elif opt == str(len(BENCH_ID_LIST)+3):
             menutxt+=show_err_stack()
             print_menu()
         elif opt[0:5] == 'code:':
@@ -2244,7 +2284,14 @@ def options_menu():
         else:
             print_hpl_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option »(n) ...« use the corresponding integer »input:n« ')
 
-
+def print_finished_runs_menu(txt = ''):
+    global menutxt
+    print(txt)
+    txt=show_highlights('max')    
+    if txt!='':
+        print_finished_runs_menu('\n'+txt)
+    else:
+        print_menu()
 #############################
 ####    functions for    ####
 ####       - OSU -       ####
@@ -2764,7 +2811,7 @@ MAX_TAG_L = 0
 init_t = time.time()-init_t
 
 
-def main():    
+def main():
     cl_arg()
 
     
