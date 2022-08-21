@@ -758,7 +758,7 @@ def error_log(txt='', local_table={}, exc_info=''):
                     
                     #very long values are left out, from our perspective printing hunderts of characters just for one variable harms the debugging more than it helps
                     if len(str(_[1]))>100:
-                        local_varvalue.append('var-value left out: '+str(len(str(_[1])))+'characters')
+                        local_varvalue.append('***var-value left out, too long: '+str(len(str(_[1])))+' characters***')
                     else:
                         local_varvalue.append(str(_[1]))
                     
