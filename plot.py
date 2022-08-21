@@ -108,6 +108,10 @@ def read_osu(profile,index,BENCH):
             #reads axis-labels                
             elif line.find('#') != -1 and label_token==True:                    
                 values[0].extend([x.lstrip() for x in line[2:-1].split(' ',1)])
+                if len(values[0])>2:
+                    for _ in values[0][3:]:
+                        values[0][2]+=' '+_
+                    values[0]=values[0][:3]
                 label_token=False 
          
             #reads results           
@@ -121,6 +125,12 @@ def read_osu(profile,index,BENCH):
                 else:
                     values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(iter_res.index(name))
   
+    #reorganizes axis labels for bar charts
+    if len(values[1][0][0][0])==1:
+        for _ in values[0][2:]:
+            values[0][1]+=' '+_
+        values[0][2]=''
+        
     return values
 
 def read_hpl(profile,index,BENCH,TIMESTEMP):
@@ -256,12 +266,10 @@ def run_plot(TIMESTEMP,BENCH):
     if len(values[1][0][0][0])==1:
         values[1]=sorted(values[1].copy(), key=lambda row: (row[0][1]))
         fig_typ='barh'
-        #reorganizes axis labels
-        if BENCH=='osu':                
-                for _ in values[0][2:]:
-                    values[0][1]+=' '+_
-                values[0][2]=''   
-    
+        
+       
+  
+            
     
     for v in values[1]:
         #function graphs        
@@ -314,7 +322,10 @@ def fig_layout(fig, ax, fig_typ):
     plt.title(values[0][0])
     plt.xlabel(values[0][1])
     plt.ylabel(values[0][2]) 
-    
+
+def clean_values():
+    global values
+    values = [[],[]]
 #debugging-function will print each triple (x,y,label)
 def plot_list():
     for val in values[1]:
