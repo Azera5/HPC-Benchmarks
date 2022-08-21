@@ -201,7 +201,7 @@ def cl_arg():
         #possible warnings etc.
         print(menutxt)
         #we're submitting our scripts
-        """
+        
         if pth!='-1':        
             print(FCOL[4]+shell(str('sbatch '+pth[pth.find('/'):pth.find('.sh')+3]))+FEND)
 
