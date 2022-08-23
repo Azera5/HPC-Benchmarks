@@ -135,7 +135,7 @@ def cl_arg():
     FCOL[2]+'     e.g.: -t hpl 1,3-4,Test1\n'+
     '           etc.\n\n'+FEND+
     FCOL[15]+'<info>    '+FEND+'clean up is »rm -r ...«-based respective to sub-directories named like »*@*[dummy]«,\n'+
-    'please be cautious with naming data in the project directory this way\n\n')
+    '          please be cautious with naming data in the project directory this way\n\n')
     
     parser.add_argument('-p','--profiles',nargs=1,type=str,help=''+
     FCOL[15]+'shows the availability of profiles for specific benchmarks\n'+FEND+  
@@ -144,6 +144,19 @@ def cl_arg():
     parser.add_argument('-l','--load',nargs=1,type=str,help=''+
     FCOL[15]+'shows how a specific profile set is loaded (Debugging)\n'+FEND+  
     FCOL[2]+'     e.g.: -l hpl\n'+FEND)
+
+    #default=['max','all','new',float('inf'),'-']
+    parser.add_argument('-s','--show',action='append',nargs='*',help=''+
+    FCOL[15]+'shows a table of the result highlights\n'+FEND+     
+    FCOL[7]+'  function:'+FEND+'    max or min\n'+
+    FCOL[7]+'  bench:'+FEND+'       benchmark name: looks only for specific benchmarks\n'+
+    FCOL[7]+'  search mode:'+FEND+' new or all:     new looks only for unviewed benchmarks\n'+
+    FCOL[7]+'  settings:'+FEND+'    + or -:         enabled/disabled setting mode \n'+
+    FCOL[7]+'  result ID:'+FEND+'   time_date:      looks only for specific result\n'+
+    FCOL[2]+'     e.g.: -s max osu new 3 +\n'+
+    FCOL[2]+'     e.g.: -s min 103015_01012022\n'+
+    FCOL[2]+'     e.g.: -s\n\n'+FEND+
+    FCOL[7]+'  default parameters: max all new infinit -\n\n'+FEND)
     
     parser.add_argument('-c','--clean',nargs=1,type=str,help=''+
     FCOL[15]+'helps to handle data clutter\n'+FEND+  
@@ -155,6 +168,7 @@ def cl_arg():
     '     '+FCOL[2]+'e.g.: -c projects\n'+
     '           -c all\n'+FEND+
     FCOL[15]+'<info>    '+FEND+'please consider saving relevant project results beforehand\n')
+
     
     
     args= parser.parse_args()
@@ -236,9 +250,42 @@ def cl_arg():
                 txt+=FORM[0]+name+FEND+ml
                 left_size-=len(name+ml)
         print(txt+'\n')
+    
+    if args.show: 
+        func='max'
+        res_id=''
+        bench_tag='all'
+        count=float('inf')
+        search_mode='new'        
+        settings='-'
+        #print(args.show)
+        for _ in args.show[0]:
+            #looks for number of values to show
+            if str(_).isdigit():
+                count=_
+            #looks for filterfunction
+            elif _ =='max' or _ =='min':
+                func=_
+            #looks for result id
+            elif str(_).find('_')==6:
+                res_id=_
+            #looks for benchmark name
+            elif _ in [tag_id_switcher(tag) for tag in BENCH_ID_LIST]:
+                bench_tag=_
+            #looks for search mode
+            elif _=='new' or _=='all':
+                search_mode=_
+            #enabled/disabled setting mode
+            elif _ =='+' or _ == '-':
+                settings=_
         
+        #print('show_highlights({},{},{},{},{},{})'.format(func,res_id,bench_tag,count,search_mode,settings))
+        print(show_highlights(func,res_id,bench_tag,count,search_mode,settings)+'\n')
+        if menutxt!='':
+            print(menutxt)
+    
     #Start via Menu   
-    if not args.install and not args.test and not args.load and not args.profiles and not args.write and not args.run and not args.clean:
+    if not args.install and not args.test and not args.load and not args.profiles and not args.write and not args.run and not args.clean and not args.show:
         menu_ctrl=True
         clear()
         for id in BENCH_ID_LIST:
@@ -982,7 +1029,7 @@ def normalise_config(name, scale=0, blocks=5, tabs=False, tabsize=8):
     
 def install_spack(pth):
     global SPACK_XPTH, menutxt
-    if shell('whereis git').split('git:')[1].isspace==False:
+    if shell('whereis git').split('git:')[1].isspace()==False:
         if len(pth)>15:
             #pth might point to the binary position
             if pth[-15:]=='spack/bin/spack':
@@ -996,8 +1043,9 @@ def install_spack(pth):
             cmd_ = 'mkdir {};'.format(inst_pth)
         else:
             cmd_ = ''
-        #set -e is supposed to prevent an installment if we're in the wrong place
-        cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd_, inst_pth)
+        #set -e is supposed to prevent an installment if we're in the wrong place        
+        cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd, inst_pth)
+        print(FCOL[15]+'\n<info>    '+FEND+'spack will installed ...\n')
         shell(cmd)
         SPACK_XPTH=pth 
         file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
@@ -1584,7 +1632,10 @@ def bench_run(bench_id, farg = 'all', extra_args = ''):
                 menutxt+=FCOL[7]+arg_name+ml+'(does not exist)'+FEND+'\n'
     
     if dbg and menu_ctrl==False:
-        names = farg_to_list(farg, tag)
+        if farg!='all':
+            names = farg_to_list(farg, tag)
+        else:
+            names = get_cfg_names(pth, tag)       
         menutxt+='\n\n'+FCOL[15]+'--- '+'summary'+' ---'+FEND+'\n\n'
         for arg_name in names:
             if arg_name not in avail_names:
@@ -1926,14 +1977,25 @@ def install_spec(expr):
         menutxt+=FCOL[9]+FORM[0]+'--- script building was canceled ---'+FEND+'\n\n'
         return ''
         
-def show_highlights(func, res_id='', bench_tag='', count=1):
-    try: 
-        clean_values()
+def show_highlights(func='max', res_id='', bench_tag='all', count=float('inf'),search_mode='new',settings_='+'):
+    try:
+        #initializes settings 
+        if settings_=='+':
+            settings=view_res_options(func, bench_tag, count, search_mode)
+            
+            if len(settings)<1:
+                return ''
+        
+            func=settings[0]
+            bench_tag=settings[1]
+            count=float(settings[2])
+            search_mode=settings[3] 
+        
         #no specific result_ID
         if res_id == '':
-            finished_benchs=check_finished_results(bench=bench_tag)           
+            finished_benchs=check_finished_results(search_mode,bench_tag)           
             print_finished_results(finished_benchs)             
-            while True: 
+            while len(finished_benchs)>0: 
                 answer=input_format()                    
                 if int(answer) > (len(finished_benchs)):
                     clear()
@@ -1954,44 +2016,62 @@ def show_highlights(func, res_id='', bench_tag='', count=1):
                 print_finished_results(finished_benchs)
         
         elif bench_tag=='':
-            finished_benchs=glob.glob('{}/projects/{}*res@{}/plot.out'.format(LOC,bench,res_id))
+            finished_benchs=glob.glob('{}/projects/*res@{}/plot.out'.format(LOC,res_id))
             res=finished_benchs[0]
             pos=res[:res.find('@')].rfind('/')
             bench_tag=res[pos+1:res.find('_')]
         
         _=read_values(res_id,bench_tag)
+        if len(_[0])==0:
+            if res_id !='' and bench_tag!='all' and bench_tag!='':
+                return '\n'+FCOL[15]+'<info>'+FEND+ml+'no results found in {}_res@{}'.format(bench_tag,res_id)
+            else:
+                return '\n'+FCOL[15]+'<info>'+FEND+ml+'no completed benchmarks found' 
+        
         label_pos=2
         
         #length of decimal places
         decimal=6
-        #formats number length
+        
+        #maximum integer part length to formatting
         max_len=max([len(str(int(max(i[0][1])))) for i in _[1]])+decimal+1
-        
+        max_len_var=max([len(str(int(max(i[0][2])))) for i in _[1]])+decimal+1
         if _[0][2]=='':
-                label_pos=1
-        
+                label_pos=1        
        
         if func=='max': 
-            values=[[str('{:{}.{}f}'.format(max(i[0][1]),max_len,decimal))+' ['+_[0][label_pos]+']',i[0][2][1:i[0][2].find(')')]] for i in _[1]]
+            values=[[str('{:{}.{}f}'.format(max(i[0][1]),max_len,decimal))+' ['+_[0][label_pos]+']','{:{}.{}f}'.format(i[0][2][i[0][1].index(max(i[0][1]))],max_len_var,decimal)+' (σ²)',i[0][3][1:i[0][3].find(']')+1].replace(')','')] for i in _[1]]
         
         elif func=='min':
-            values=[[str('{:{}.{}f}'.format(min(i[0][1]),max_len,decimal))+' ['+_[0][label_pos]+']',i[0][2][1:i[0][2].find(')')]] for i in _[1]]
-                    
+            values=[[str('{:{}.{}f}'.format(min(i[0][1]),max_len,decimal))+' ['+_[0][label_pos]+']','{:{}.{}f}'.format(i[0][2][i[0][1].index(max(i[0][1]))],max_len_var,decimal)+' (σ²)',i[0][3][1:i[0][3].find(']')+1].replace(')','')] for i in _[1]]
+                            
+        #max number of viewable results (all)
+        if float(count) > len(values):
+            count=len(values)       
         
-        print([max(i[0][1]) for i in _[1]])
-        
-        return(draw_table(values[:count],t_width,0,0.9,'Highlights ({})'.format(func)))       
+        status=file_r('{}/projects/{}_res@{}/plot.out'.format(LOC,bench_tag,res_id),0)[:-1]        
+        if status.find('fetched')<0:
+            file_w('{}/projects/{}_res@{}/plot.out'.format(LOC,bench_tag,res_id),status+' fetched',0)
+        return draw_table(values[:int(count)],t_width,0,0.9,'{}_res@{} ({})'.format(bench_tag,res_id,func))
+
        
     except Exception as exc:     
         error_log('', locals(), traceback.format_exc())
 
 def print_finished_results(res_list,txt_=''):
-    txt='\n'+ml+FCOL[15]+'<info>'+FEND+ml+'some benchmarks are finished: which result do you wish to inspect??'
-    txt+='\n      '+ml+ml+FCOL[0]+'results are sorted by their complition time (newest projects first)\n\n'+FEND
-    txt+='      {}(0){} skip'.format(ml+ml+ml,mr)   
-    for res in res_list:        
-        pos=res[:res.find('@')].rfind('/')
-        txt+='\n      {}({}){} {}'.format(ml+ml+ml,str(res_list.index(res)+1),mr,res[pos+1:-9])
+    global menutxt
+    txt=''
+    if menu_ctrl==True and len(res_list)>0:
+        txt+=(FBGR[11]+FORM[0]+'{:^{pos}}'.format('Highlights-Settings', pos=t_width)+FEND)
+    if len(res_list)<1:
+        return ''
+    else:
+        txt='\n'+FCOL[15]+'<info>'+FEND+ml+'some benchmarks are finished: which result do you wish to inspect?'
+        txt+='\n      '+ml+FCOL[0]+'results are sorted by their complition time (newest projects first)\n\n'+FEND
+        txt+='      {}(0){} cancel'.format(ml+ml,mr)   
+        for res in res_list:        
+            pos=res[:res.find('@')].rfind('/')
+            txt+='\n      {}({}){} {}'.format(ml+ml,str(res_list.index(res)+1),mr,res[pos+1:-9])
     
     if txt_!='':
         txt+='\n\n      '+ml+ml+txt_
@@ -2000,12 +2080,14 @@ def print_finished_results(res_list,txt_=''):
     
     
 #returns a list of finished benchmarks
-def check_finished_results(selected='new',bench=''):
+def check_finished_results(search_mode='new',bench_tag=''):
     try:
         finished_benchs=[]
-        results = glob.glob('{}/projects/{}*res@*/plot.out'.format(LOC,bench))
-        for res in results:
-            if selected == 'all' or file_r(res,0).find('fetched')==-1:
+        if bench_tag=='all':
+            bench_tag=''
+        results = glob.glob('{}/projects/{}*res@*/plot.out'.format(LOC,bench_tag))        
+        for res in results:            
+            if search_mode == 'all' or file_r(res,0).find('fetched')==-1:
                 _=file_r(res,0).split()
                 
                 if len(_)<2:
@@ -2018,6 +2100,71 @@ def check_finished_results(selected='new',bench=''):
         return [i[0] for i in finished_benchs]        
     except Exception as exc:     
         error_log('', locals(), traceback.format_exc())
+
+
+def view_res_options(func, bench_tag, count, search_mode):    
+    print_view_res_options(func, bench_tag, count, search_mode)
+    answer=input_format()
+    while answer!='0' and answer!='1':
+        if answer=='2':
+            #print_view_res_options(func, bench_tag, count, search_mode,'{}insert aggreagtion-function{}(max or min)\n'.format(ml+ml+ml,mr))
+            
+            if func=='max':
+                func='min'
+            else:
+                func='max'
+                
+            print_view_res_options(func, bench_tag, count, search_mode)            
+            answer=input_format()
+        
+        elif answer=='3':
+            print_view_res_options(func, bench_tag, count, search_mode,'{}insert number of highlights to show\n{}{}it should be smaller than number of profiles{}\n'.format(ml+ml+ml,ml+ml+ml,FCOL[0],FEND))
+            count=input_format()
+            print_view_res_options(func, bench_tag, count, search_mode)            
+            answer=input_format()
+        
+        elif answer=='4':
+            print_view_res_options(func, bench_tag, count, search_mode,'{}insert benchmark tag\n'.format(ml+ml+ml,mr))
+            bench_tag=input_format()
+            print_view_res_options(func, bench_tag, count, search_mode)            
+            answer=input_format()  
+        
+        elif answer=='5':
+            #print_view_res_options(func, bench_tag, count, search_mode,'{}insert wished search mode (new/all)\n'.format(ml+ml+ml,mr))
+            
+            if search_mode=='new':
+                search_mode='all'
+            else:
+                search_mode='new'
+            
+            print_view_res_options(func, bench_tag, count, search_mode)            
+            answer=input_format() 
+        else:
+            print_view_res_options(func, bench_tag, count, search_mode,FCOL[9]+'invalid input'+FEND+': to select option »(n) ...« use the corresponding integer »input:n« ')
+            answer=input_format()
+            
+    if answer=='0': 
+        return []    
+    
+    return[func, bench_tag, count, search_mode]
+
+def print_view_res_options(func, bench_tag, count, search_mode,txt_=''):
+    clear()
+    if menu_ctrl==True:
+         print(FBGR[11]+FORM[0]+'{:^{pos}}'.format('Highlights-Settings', pos=t_width)+FEND)
+    txt='\n'+ml+ml+FCOL[15]+'change settings by selection or continue\n\n'+FEND
+    
+    txt_0='{}(0){} cancel\n'.format(ml+ml+ml,mr)
+    txt_1='{}(1){} continue\n'.format(ml+ml+ml,mr)
+    txt_2='{}(2){} aggregation-function ({})\n'.format(ml+ml+ml,mr,func)    
+    txt_3='{}(3){} number of shown highlights ({})\n'.format(ml+ml+ml,mr,count)
+    txt_4='{}(4){} benchmark ({})'.format(ml+ml+ml,mr,bench_tag)
+    txt_5=FCOL[0]+' (only searches for specific benchmark)\n'+FEND    
+    txt_6='{}(5){} search mode ({})'.format(ml+ml+ml,mr,search_mode)
+    txt_7=FCOL[0]+' (new: only looks for unviewed results)\n'+FEND 
+    
+    print(txt+txt_0+txt_1+txt_2+txt_3+txt_4+txt_5+txt_6+txt_7+'\n'+txt_)
+
 
 """
 Menu Functions
@@ -2120,7 +2267,11 @@ def menu():
                     menutxt+=FCOL[6]+'<warning> '+FEND+'{}\n'.format(spack_problem)
             print_menu('')
         elif opt == '3' or opt == 'View finished runs':
-            print_finished_runs_menu()  
+            try:
+                menutxt+=(show_highlights())  
+            except Exception as exc:
+                error_log('', locals(), traceback.format_exc()) 
+            print_menu()
             
         elif opt.isdigit() and int(opt)>3 and int(opt)<=len(BENCH_ID_LIST)+2:
             #-2 ist der Offset der die Positionen 'Option' und 'Info' ausgleicht
@@ -2284,14 +2435,6 @@ def options_menu():
         else:
             print_hpl_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option »(n) ...« use the corresponding integer »input:n« ')
 
-def print_finished_runs_menu(txt = ''):
-    global menutxt
-    print(txt)
-    txt=show_highlights('max')    
-    if txt!='':
-        print_finished_runs_menu('\n'+txt)
-    else:
-        print_menu()
 #############################
 ####    functions for    ####
 ####       - OSU -       ####
@@ -2337,7 +2480,7 @@ def osu_menu():
             if spack_problem!='':
                 txt+='\n\n'+ml+FCOL[6]+'<warning> '+FEND+'no availability information!\n'+ml+'          reason: {}\n'.format(spack_problem)+'          '+ml+FCOL[6]+SPACK_XPTH+FEND
             print_osu_menu(txt)
-            expr=input_format().split()            
+            expr=input_format().split()         
             if len(expr)<2:
                 txt+='invalid input, possible reason: unspecified test-type e.g. latency'                
                 print_osu_menu(txt)
