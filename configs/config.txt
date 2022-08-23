@@ -2,9 +2,9 @@
 -----------Leereinträge werden-----------
 ------------zum Start ergänzt------------
 -----------------------------------------
-/home/urz/lafontai/spack/bin/spack        [Path to the spack-binary]
+       [Path to the spack-binary]
 ~
-/home/urz/lafontai/hpc-benchmarks/projects
+
 
 ------------------SLURM------------------
 -------Installations-Einstellungen-------
