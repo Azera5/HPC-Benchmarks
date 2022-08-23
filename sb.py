@@ -1044,7 +1044,7 @@ def install_spack(pth):
         else:
             cmd_ = ''
         #set -e is supposed to prevent an installment if we're in the wrong place        
-        cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd, inst_pth)
+        cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd_, inst_pth)
         print(FCOL[15]+'\n<info>    '+FEND+'spack will installed ...\n')
         shell(cmd)
         SPACK_XPTH=pth 
