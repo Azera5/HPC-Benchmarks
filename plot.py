@@ -3,12 +3,12 @@ import os
 import glob
 import sys
 import re
+import math
 from datetime import datetime
-
 
 try:
     import matplotlib.pyplot as plt
-    from sb import file_w
+    from sb import file_w, error_log
 except ImportError:
         pass
 
@@ -32,6 +32,7 @@ append_count = 0
 
 #reads results
 def read_values(TIMESTEMP,BENCH):
+    clean_values()
     profiles = glob.glob('{}/projects/*'.format(LOC)+'*res@'+TIMESTEMP+'/*/')
     global values
     global append_count
@@ -62,10 +63,13 @@ def read_values(TIMESTEMP,BENCH):
         if append_count>0:
             #aggregates data across all iterations
             aggregated=aggregate_results(values[1][len(values[1])-1][1],aggregate_func)
+            var=calc_variance(values[1][len(values[1])-1][1])
             
             values[1][len(values[1])-1][0][0]=aggregated[0]
             values[1][len(values[1])-1][0][1]=aggregated[1]
-            values[1][len(values[1])-1][0][2]='({}) [{}#{}]\n{}'.format(name[name.rfind(TIMESTEMP+'/')+len(TIMESTEMP)+1:-1],aggregate_func,len(values[1][len(values[1])-1][1]),values[1][len(values[1])-1][0][2])
+            values[1][len(values[1])-1][0][2]=var[1]          
+            values[1][len(values[1])-1][0][3]='({}) [{}#{}]\n{}'.format(name[name.rfind(TIMESTEMP+'/')+len(TIMESTEMP)+1:-1],aggregate_func,len(values[1][len(values[1])-1][1]),values[1][len(values[1])-1][0][3])
+            
             append_count=0    
         
         label_token=True    
@@ -83,7 +87,7 @@ def read_osu(profile,index,BENCH):
             continue
 
         if append_count==0:
-            values[1].append([[[],[],[]],[]])
+            values[1].append([[[],[],[],[]],[]])
             append_count+=1
                 
         values[1][len(values[1])-1][1].append([[],[]])
@@ -99,7 +103,7 @@ def read_osu(profile,index,BENCH):
             #reads mpi-implementation         
             name_=profile[1:-1]
             with open('{}/configs/'.format(LOC)+BENCH+name_[name_.rfind('/'):]+'.txt','r') as f:
-                values[1][len(values[1])-1][0][2]='{}'.format(f.readlines()[7].split()[0])
+                values[1][len(values[1])-1][0][3]='{}'.format(f.readlines()[7].split()[0])
             
             #reads title
             if line.find('# OSU MPI ')!=-1 and label_token==True:
@@ -107,7 +111,7 @@ def read_osu(profile,index,BENCH):
                 
             #reads axis-labels                
             elif line.find('#') != -1 and label_token==True:                    
-                values[0].extend([x.lstrip() for x in line[2:-1].split(' ',1)])
+                values[0].extend([x.lstrip() for x in line[2:-1].split(' ',1)])                
                 if len(values[0])>2:
                     for _ in values[0][3:]:
                         values[0][2]+=' '+_
@@ -144,7 +148,7 @@ def read_hpl(profile,index,BENCH,TIMESTEMP):
             continue
     
         if append_count==0:
-            values[1].append([[[],[],[]],[]])
+            values[1].append([[[],[],[],[]],[]])
             append_count+=1
     
         values[1][len(values[1])-1][1].append([[],[]])        
@@ -156,7 +160,7 @@ def read_hpl(profile,index,BENCH,TIMESTEMP):
         if label_token==True:
             slurm_param=read_slurm_param(name,TIMESTEMP)
             
-            values[1][len(values[1])-1][0][2]='Ps {}; Qs {}; threshold {}Sizes (Ns) {}; Blocksizes (NBs) {}\nSlurm: nodes {}; cpus per task: {}\n'.format(
+            values[1][len(values[1])-1][0][3]='Ps {}; Qs {}; threshold {}Sizes (Ns) {}; Blocksizes (NBs) {}\nSlurm: nodes {}; cpus per task: {}\n'.format(
                 stringlist[21].split()[2],
                 stringlist[22].split()[2], 
                 stringlist[41].split('than')[1].lstrip(),
@@ -168,7 +172,7 @@ def read_hpl(profile,index,BENCH,TIMESTEMP):
             label_token=False
         
         #results
-        val=float(stringlist[46].split()[6].replace('.',''))
+        val=float(stringlist[46].split()[6])
         values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][0].append(float(index))
         values[1][len(values[1])-1][1][len(values[1][len(values[1])-1][1])-1][1].append(val)
        
@@ -185,7 +189,7 @@ def read_hpcg(profile,index,BENCH,TIMESTEMP):
             continue
         
         if append_count==0:
-            values[1].append([[[],[],[]],[]])            
+            values[1].append([[[],[],[],[]],[]])            
             append_count+=1     
         
         values[1][len(values[1])-1][1].append([[],[]])
@@ -204,7 +208,7 @@ def read_hpcg(profile,index,BENCH,TIMESTEMP):
                 _=f.readlines()[12].split()
                 problem_size='{} {} {}'.format(_[0],_[1],_[2])
             
-            values[1][len(values[1])-1][0][2]='size {}; processes {}; threads per proc. {}\nSlurm: nodes {}; cpus per task: {}\n'.format(problem_size,stringlist[4].split('=')[1][:-1],stringlist[5].split('=')[1][:-1],slurm_param[0],slurm_param[1])                        
+            values[1][len(values[1])-1][0][3]='size {}; processes {}; threads per proc. {}\nSlurm: nodes {}; cpus per task: {}\n'.format(problem_size,stringlist[4].split('=')[1][:-1],stringlist[5].split('=')[1][:-1],slurm_param[0],slurm_param[1])                        
             label_token=False
         
         #results
@@ -236,6 +240,17 @@ def aggregate_results(list, func):
     
     return _.tolist()
 
+def calc_variance(list):
+    return np.var(list,axis=0).tolist()
+
+#Min-Max-Normalisierung
+def normalize_values(list):   
+    min_=0
+    max_=0
+    max_=max(list)
+    min_=min(list)    
+    return [(i-min_)/(max_-min_) for i in list]
+
 def read_slurm_param(name,TIMESTEMP):
     nodes='nA'
     cpus_per_task='nA'
@@ -259,26 +274,31 @@ def read_slurm_param(name,TIMESTEMP):
 def run_plot(TIMESTEMP,BENCH):
     values = read_values(TIMESTEMP,BENCH)
     fig, ax = plt.subplots()    
-    labels=['']
+    #labels=[]
     fig_typ=''
+    
+    if len(values[1])==0:
+        error_log('plotting impossible, no results found')
+        sys.exit('plotting impossible: no results found')
     
     #reorder of results for bar charts   
     if len(values[1][0][0][0])==1:
         values[1]=sorted(values[1].copy(), key=lambda row: (row[0][1]))
         fig_typ='barh'
-        
-       
-  
             
     
     for v in values[1]:
         #function graphs        
-        if len(v[0][0])>1:            
-            plt.plot(v[0][0],v[0][1],label=v[0][2])
+        if len(v[0][0])>1:           
+            p=plt.plot(v[0][0],v[0][1],label=v[0][3])  
+            c=p[0].get_color()
+            #Plots variance graph
+            plt.plot(v[0][0],v[0][2],alpha=0.8,color=c,linestyle='dotted',linewidth=0.7)
             
+               
         #horizontal bar chart
         else:
-            plt.barh(v[0][2],v[0][1],label=v[0][2])
+            plt.barh(v[0][3],v[0][1],label=v[0][3],xerr=v[0][2][0],capsize=4)
             
             
             
@@ -311,13 +331,15 @@ def fig_layout(fig, ax, fig_typ):
         fig.subplots_adjust(left=0.1,right=0.6)
 
         handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles[::-1], labels[::-1],loc='upper left', bbox_to_anchor=(1, 1), fancybox=True, shadow=True, ncol=1)
-               
-        plt.yticks(ticks=range(0,len(values[1])),labels=[_[0][2][1:_[0][2].find(')')] for _ in values[1]])        
+        ax.legend(handles[::-1], labels[::-1],loc='upper left', bbox_to_anchor=(1, 1), fancybox=True, shadow=True, ncol=1)               
+        plt.yticks(ticks=range(0,len(values[1])),labels=[_[0][3][1:_[0][3].find(')')] for _ in values[1]])        
     
     else:
-        plt.legend()
-        plt.grid(color='b', alpha=0.5, linestyle='dashed', linewidth=0.5)
+        fig.set_figwidth(10)
+        fig.subplots_adjust(right=0.7)
+        ax.legend(loc='upper left', bbox_to_anchor=(1, 1), fancybox=True, shadow=True)
+        #plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fancybox=True, shadow=True)
+        plt.grid(color='b', alpha=0.3, linestyle='dashed', linewidth=0.4)
     
     plt.title(values[0][0])
     plt.xlabel(values[0][1])
@@ -336,7 +358,7 @@ def main():
     BENCH=str(sys.argv[2])
     run_plot(TIMESTEMP,BENCH)
     time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    file_w('{}/projects/{}_res@{}/plot.out'.format(LOC,BENCH,TIMESTEMP),'{} finished'.format(time),'a')
+    file_w('{}/projects/{}_res@{}/plot.out'.format(LOC,BENCH,TIMESTEMP),'{} finished'.format(time),0)
     
 if __name__ == "__main__":
     main()
