@@ -8,7 +8,7 @@ from sb import shell, check_expr_syn, error_log, LOC, FCOL, FEND, info_feed
 #debugging
 import traceback
 
-meta=sys.argv[1].split('#')
+slurm='#!/'+sys.argv[1].replace('$','\n').replace('_',' ')
 expr=[_.split('$') for _ in sys.argv[2].split('#')]
 menutxt=''
 no_hint = True
@@ -36,6 +36,7 @@ def check_expr(expr,name):
     try:
         global menutxt   
         check_syn=check_expr_syn(expr,name)
+        print(expr)
         if check_syn=='True':
             arr = expr.split('^')       
             
@@ -79,18 +80,22 @@ def check_expr(expr,name):
 def install_spec(expr):
     try:
         global menutxt
+        global slurm
+        specs=''
+        """
         partition=meta[0]
         node=meta[1]
         task=meta[2]
         cpus=meta[3]
+        
         #Check ob angegebene Partition existiert
         if shell('sinfo -h -p '+partition).find(partition)==-1:        
             error_log('partition doesn\'t {} exist!'.format(str(partition)))
             #os.system('echo Partition: {} existiert nicht >> {}/install.err'.format(str(partition),LOC),locals())
             return 
             
-        slurm=''
-        specs=''  
+        #slurm=meta
+          
         
         #Slurmparameter für die Installation
         slurm='#!/bin/bash\n' \
@@ -101,7 +106,7 @@ def install_spec(expr):
         +'#SBATCH --output={}/install.out\n'.format(LOC) \
         +'#SBATCH --error={}/install.err\n\n'.format(LOC) \
         +'source {}/share/spack/setup-env.sh\n'.format(meta[4])
-        
+        """
         for e in expr:
             #Prüft ob identische spec installiert werden soll
             if specs.find(e[0])==-1:            

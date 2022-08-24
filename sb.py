@@ -473,7 +473,7 @@ def check_python():
             answer=input_format()
             
             if answer==str(1):
-                install_py_script=write_slurm_params(cfg_profiles[0][0],2)+'\n'
+                install_py_script=write_slurm_params(cfg_profiles[0][0],2)+'#SBATCH --output={}/install_python.out\n'.format(LOC)+'#SBATCH --error={}/install_python.err\n'.format(LOC)+'\n'
                 install_py_script+='source {}/share/spack/setup-env.sh\n'.format(SPACK_XPTH[:-9])
                 install_py_script+='spack install python'
                                 
@@ -1957,14 +1957,17 @@ def check_expr_syn(expr, name):
 def install_spec(expr):  
     global menutxt
     #Slurmparameter 
-    meta=cfg_profiles[0][0][2][0]+'#'+cfg_profiles[0][0][2][1]+'#'+cfg_profiles[0][0][2][2]+'#'+cfg_profiles[0][0][2][3]+'#'+SPACK_XPTH[:-9]
+    slurm=write_slurm_params(cfg_profiles[0][0],2)[3:].replace('\n','\$').replace(' ','_')+'#SBATCH_--output={}/install.out\$'.format(LOC)+'#SBATCH_--error={}/install.err\$\$'.format(LOC)+'source_{}/share/spack/setup-env.sh\$\$'.format(SPACK_XPTH[:-9])
+    meta=slurm
+    #meta=cfg_profiles[0][0][2][0]+'#'+cfg_profiles[0][0][2][1]+'#'+cfg_profiles[0][0][2][2]+'#'+cfg_profiles[0][0][2][3]+'#'+SPACK_XPTH[:-9]
     expr_=''    
     #String aller Specs
     for e in expr:
         expr_+=e[0]+'\$'+e[1]+'#'
     
-    #Printen der Job ID klappt noch nicht
+    #run install.py
     cmd='source {}/share/spack/setup-env.sh ; python3 {}/install.py {} {}'.format(SPACK_XPTH[:-9], LOC,meta,expr_[:len(expr_)-1])
+    #print(cmd)
     p=subprocess.run(str(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
     
     menutxt+=p.stdout.decode()
