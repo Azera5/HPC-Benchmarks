@@ -668,28 +668,30 @@ def save_times():
     stat_table.append([str('{:08.6f}'.format(check_dirs_t))+' [s]','dir. verification   ƒ@init.'])
     stat_table.append([str('{:08.6f}'.format(get_cfg_t))+' [s]','config loading      ƒ@cl_arg();menu()'])
 
-#looking for matplotlib and installs if not found
+#looking for matplotlib and numpy, installs if not found
 def find_matplot_python_hash():
+    global menutxt
     pth_spack=SPACK_XPTH[:SPACK_XPTH.find('spack')+5]
-    pth=shell('find {} -name matplotlib'.format(pth_spack))
-   
+    pth=shell('find {} -name matplotlib'.format(pth_spack))    
     #Kein matplotlib installiert 
     if pth=='':
         sourcen='source {}/share/spack/setup-env.sh; '.format(SPACK_XPTH[:-9])
         py=shell('find '+pth_spack+' -name python | grep bin').split('\n')
+        print(py)       
         count=len(py)-1
+        print(count)
         #Eine Pythonversion vorhanden
-        if count==1:
-            print(shell(sourcen+'spack load python; python -m pip install matplotlib'))
-            return ''
+        if count==1:            
+            menutxt+=(shell(sourcen+'spack load python;spack load py-pip; python -m pip install matplotlib'))            
+            return  ''
             
         #Mehrere Pythonversionen vorhanden
         #py in Form von: spack/opt/spack/linux-centos8-zen3/gcc-12.1.0/python-3.9.12-6ewjgugumhth6r56gvjxhdtq6tvowln7/bin/python 
         #Wir brauchen den hash: 6ewjgugumhth6r56gvjxhdtq6tvowln7
         else:
             py=py[0][py[0].find('python-')+7:py[0].find('/bin')]
-            py_hash=py[py.find('-')+1:]
-            u=shell(sourcen+'spack load python /'+py_hash+'; python -m pip install matplotlib')
+            py_hash=py[py.find('-')+1:]           
+            menutxt+=(shell(sourcen+'spack load python /'+py_hash+';spack load py-pip; python -m pip install matplotlib'))            
             return '/'+py_hash
             
     #Matplotlib ist installiert 
@@ -1759,9 +1761,10 @@ def build_batch(selected_profiles, bench_id, extra_args = ''):
                 batchtxt+=build_job(profile, bench_id, run_dir, res_dir, 0)+')\n'
     
     batchtxt+='\nsource {}/share/spack/setup-env.sh\n'.format(SPACK_XPTH[:-9])
-    batchtxt+='spack load python '+find_matplot_python_hash()+'\n'
-    batchtxt+='sbatch --dependency=afterany:${id'+str(dependency_offset-1)+'##* } ' + build_plot(t_id,tag_id_switcher(bench_id),run_dir)   
-    
+    matplotlib_pth=find_matplot_python_hash()
+    if len(matplotlib_pth)>2:
+        batchtxt+='spack load python '+matplotlib_pth+'\n'
+        batchtxt+='sbatch --dependency=afterany:${id'+str(dependency_offset-1)+'##* } ' + build_plot(t_id,tag_id_switcher(bench_id),run_dir)     
     #Niederschreiben des Skripts & Rückgabe des entspr. Pfads hin
     file_w(run_dir+'batch.sh',batchtxt,'a')
     shell('chmod +x '+run_dir+'batch.sh')
