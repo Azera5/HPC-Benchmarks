@@ -550,7 +550,7 @@ def check_data():
         txt+='\ndir. verification []'
         txt+='\nconfig loading    []'
         file_w('{}/mem.txt'.format(LOC), txt, 'a')
-        initm+='\n'+FCOL[15]+'<info>'+FEND+ml+'program settings file (mem.txt) was created ...\n'
+        #initm+='\n'+FCOL[15]+'<info>'+FEND+ml+'program settings file (mem.txt) was created ...\n'
         form_factor_menu = int(get_mem_digit(2))
         refresh_format_params()
         refresh_intervall = int(get_mem_digit(3))
@@ -1325,7 +1325,7 @@ def clean(inpt = 'all'):
         txt+='\ndir. verification []'
         txt+='\nconfig loading    []'
         file_w('{}/mem.txt'.format(LOC), txt, 'a')
-        initm+='\n'+FCOL[15]+'<info>'+FEND+ml+'program settings file (mem.txt) was created ...\n'
+        #initm+='\n'+FCOL[15]+'<info>'+FEND+ml+'program settings file (mem.txt) was created ...\n'
         form_factor_menu = int(get_mem_digit(2))
         refresh_format_params()
         refresh_intervall = int(get_mem_digit(3))
