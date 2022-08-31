@@ -1,5 +1,5 @@
 --------------------meta settings--------------------
-15					[iterations]
+3					[iterations]
 avg					[aggregation: e.g. avg, max]
 ------------------base dependencies------------------
 @							[HPL Version]

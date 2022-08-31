@@ -1,5 +1,5 @@
 --------------------meta settings--------------------
-15					[iterations]
+3					[iterations]
 avg					[aggregation: e.g. avg, max]
 ------------------base dependencies------------------
 2.3							[HPL Version]
@@ -17,7 +17,7 @@ gcc							[BLAS Compiler]
 HPL.out      				[ungenutzt]
 6            				[ungenutzt]
 3            				[#Matrizen]
-2304 2304 2304     			[Matrixgröße(n)]
+2304   		     			[Matrixgröße(n)]
 1            				[#Blöcke]
 192      				[Blockgröße(n)]
 0            				[Mapping: 0=row;1=column]

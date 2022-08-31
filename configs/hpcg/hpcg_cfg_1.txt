@@ -1,5 +1,5 @@
 --------------------meta settings--------------------
-15					[iterations]
+2					[iterations]
 avg					[aggregation: e.g. avg, max]
 ------------------base dependencies------------------
 3.1					[HPCG Version]
