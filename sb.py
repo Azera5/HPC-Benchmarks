@@ -532,25 +532,25 @@ def check_data():
     if os.path.isfile('{}/mem.txt'.format(LOC))==False:     
         txt='-------------------program settings-------------------'
         txt+='\n---------------direct input or via menu---------------'
-        txt+='\nform_factor_menu\t\t\t[12]'
-        txt+='\nrefresh_intervall\t\t\t[0]'
-        txt+='\ncolour_support\t\t\t[0]'
-        txt+='\ndebug_mode\t\t\t[0]'
-        txt+='\ninfo_feed\t\t\t[0]'
-        txt+='\ntermination_logging\t\t\t[0]'
-        txt+='\npath_logging\t\t\t[0]'
-        txt+='\nauto_space_normalization\t\t\t[0]'
-        txt+='\ncheck_python_setting\t\t\t[1]'
+        txt+='\nform_factor_menu          [12]'
+        txt+='\nrefresh_intervall         [0]'
+        txt+='\ncolour_support            [0]'
+        txt+='\ndebug_mode                [0]'
+        txt+='\ninfo_feed                 [0]'
+        txt+='\ntermination_logging       [0]'
+        txt+='\npath_logging              [0]'
+        txt+='\nauto_space_normalization  [0]'
+        txt+='\ncheck_python_setting      [1]'
         txt+='\n------------------last boot up stats------------------'
         txt+='\n----------------no intended user input----------------'
-        txt+='\nevaluate_paths\t\t\t[]'
-        txt+='\nprepare_array\t\t\t[]'
-        txt+='\ncheck_data\t\t\t[]'
-        txt+='\ncheck_dirs\t\t\t[]'
-        txt+='\nget_cfg\t\t\t[]'
-        txt+='\ncreate_mem\t\t\t[]'
+        txt+='\ninitialization    []'
+        txt+='\npath evaluation   []'
+        txt+='\narray preparation []'
+        txt+='\ndata verification []'
+        txt+='\ndir. verification []'
+        txt+='\nconfig loading    []'
         file_w('{}/mem.txt'.format(LOC), txt, 'a')
-        initm+='program settings (mem.txt) were created ...\n'
+        initm+='\n'+FCOL[15]+'<info>'+FEND+ml+'program settings file (mem.txt) was created ...\n'
         form_factor_menu = int(get_mem_digit(2))
         refresh_format_params()
         refresh_intervall = int(get_mem_digit(3))
@@ -1307,25 +1307,25 @@ def clean(inpt = 'all'):
             shell('rm {}/mem.txt'.format(LOC))
         txt='-------------------program settings-------------------'
         txt+='\n---------------direct input or via menu---------------'
-        txt+='\nform_factor_menu\t\t\t[12]'
-        txt+='\nrefresh_intervall\t\t\t[0]'
-        txt+='\ncolour_support\t\t\t[0]'
-        txt+='\ndebug_mode\t\t\t[0]'
-        txt+='\ninfo_feed\t\t\t[0]'
-        txt+='\ntermination_logging\t\t\t[0]'
-        txt+='\npath_logging\t\t\t[0]'
-        txt+='\nauto_space_normalization\t\t\t[0]'
-        txt+='\ncheck_python_setting\t\t\t[1]'
+        txt+='\nform_factor_menu          [12]'
+        txt+='\nrefresh_intervall         [0]'
+        txt+='\ncolour_support            [0]'
+        txt+='\ndebug_mode                [0]'
+        txt+='\ninfo_feed                 [0]'
+        txt+='\ntermination_logging       [0]'
+        txt+='\npath_logging              [0]'
+        txt+='\nauto_space_normalization  [0]'
+        txt+='\ncheck_python_setting      [1]'
         txt+='\n------------------last boot up stats------------------'
         txt+='\n----------------no intended user input----------------'
-        txt+='\nevaluate_paths\t\t\t[]'
-        txt+='\nprepare_array\t\t\t[]'
-        txt+='\ncheck_data\t\t\t[]'
-        txt+='\ncheck_dirs\t\t\t[]'
-        txt+='\nget_cfg\t\t\t[]'
-        txt+='\ncreate_mem\t\t\t[]'
+        txt+='\ninitialization    []'
+        txt+='\npath evaluation   []'
+        txt+='\narray preparation []'
+        txt+='\ndata verification []'
+        txt+='\ndir. verification []'
+        txt+='\nconfig loading    []'
         file_w('{}/mem.txt'.format(LOC), txt, 'a')
-        initm+='program settings (mem.txt) were created ...\n'
+        initm+='\n'+FCOL[15]+'<info>'+FEND+ml+'program settings file (mem.txt) was created ...\n'
         form_factor_menu = int(get_mem_digit(2))
         refresh_format_params()
         refresh_intervall = int(get_mem_digit(3))
@@ -2746,14 +2746,6 @@ def get_mem_digit(pos):
         return int(r)
     else:
         return 0
-
-"""
-    try:     
-        
-    except Exception as exc:     
-        error_log('') 
-"""
-        
 
 
 
