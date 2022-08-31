@@ -9,10 +9,10 @@ openmpi						[MPI Implementierung]
 4.1.3						[MPI Version]
 gcc							[MPI Compiler]
 12.1.0						[MPI Version]
------------------benchmark parameter-----------------
+-----------------benchmark parameters-----------------
 260 260 260				[problem size]
 16            				[time target in s]
--------------------SLURM parameter-------------------
+-------------------SLURM parameters-------------------
 vl-parcio					[Partition]
 4							[Nodes]
 4							[Prozesse]

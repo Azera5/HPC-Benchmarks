@@ -13,7 +13,7 @@ openblas      				[BLAS Implementierung]
 0.3.20      				[BLAS Version]
          				[BLAS Compiler]
          				[BLAS Version]
------------------benchmark parameter-----------------
+-----------------benchmark parameters-----------------
 HPL.out      				[ungenutzt]
 6            				[ungenutzt]
 3            				[#Matrizen]
@@ -43,7 +43,7 @@ HPL.out      				[ungenutzt]
 0            				[ungenutzt]
 1            				[ungenutzt]
 8            				[ungenutzt]
--------------------SLURM parameter-------------------
+-------------------SLURM parameters-------------------
 vl-parcio					[Partition]
 2							[Nodes]
 15							[Prozesse]

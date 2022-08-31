@@ -9,7 +9,7 @@ intel-mpi					[MPI Implementierung]
 2019.10.317					[MPI Version]
 gcc							[MPI Compiler]
 12.1.0						[MPI Version]
-s-------------------SLURM parameter-------------------
+s-------------------SLURM parameters-------------------
 vl-parcio					[Partition]
 2							[Nodes]
 1							[Prozesse]

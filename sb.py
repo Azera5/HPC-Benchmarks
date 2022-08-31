@@ -147,16 +147,16 @@ def cl_arg():
 
     #default=['max','all','new',float('inf'),'-']
     parser.add_argument('-s','--show',action='append',nargs='*',help=''+
-    FCOL[15]+'shows a table of the result highlights\n'+FEND+     
+    FCOL[15]+'shows project-highlights\n'+FEND+     
     FCOL[7]+'  function:'+FEND+'    max or min\n'+
-    FCOL[7]+'  bench:'+FEND+'       benchmark name: looks only for specific benchmarks\n'+
-    FCOL[7]+'  search mode:'+FEND+' new or all:     new looks only for unviewed benchmarks\n'+
+    FCOL[7]+'  bench:'+FEND+'       benchmark name: shows only specific benchmarks\n'+
+    FCOL[7]+'  search mode:'+FEND+' new or all:     »new« shows only unseen projects\n'+
     FCOL[7]+'  settings:'+FEND+'    + or -:         enabled/disabled setting mode \n'+
-    FCOL[7]+'  result ID:'+FEND+'   time_date:      looks only for specific result\n'+
+    FCOL[7]+'  result ID:'+FEND+'   time_date:      shows only a specific project\n'+
     FCOL[2]+'     e.g.: -s max osu new 3 +\n'+
     FCOL[2]+'     e.g.: -s min 103015_01012022\n'+
     FCOL[2]+'     e.g.: -s\n\n'+FEND+
-    FCOL[7]+'  default parameters: max all new infinit -\n\n'+FEND)
+    FCOL[7]+'  default parameters: max all new infinite -\n\n'+FEND)
     
     parser.add_argument('-c','--clean',nargs=1,type=str,help=''+
     FCOL[15]+'helps to handle data clutter\n'+FEND+  
@@ -647,8 +647,7 @@ def get_cfg(bench,farg='all'):
         #small illustration of loadprogress
         if id != MISC_ID:
             progressbar(names.index(p)+1, len(names))        
-        txtfile.close()
-    print(test)   
+        txtfile.close()       
     #not »get_cfg_t=time.time()-timestart« because we might have multiple loading operations
     get_cfg_t+=time.time()-timestart    
 
@@ -676,13 +675,12 @@ def find_matplot_python_hash():
     #Kein matplotlib installiert 
     if pth=='':
         sourcen='source {}/share/spack/setup-env.sh; '.format(SPACK_XPTH[:-9])
-        py=shell('find '+pth_spack+' -name python | grep bin').split('\n')
-        print(py)       
+        py=shell('find '+pth_spack+' -name python | grep bin').split('\n')     
         count=len(py)-1
-        print(count)
         #Eine Pythonversion vorhanden
-        if count==1:            
-            menutxt+=(shell(sourcen+'spack load python;spack load py-pip; python -m pip install matplotlib'))            
+        if count==1: 
+            print('installing matplotlib ...')
+            shell(sourcen+'spack load python;spack load py-pip; python -m pip install matplotlib')       
             return  ''
             
         #Mehrere Pythonversionen vorhanden
@@ -690,8 +688,9 @@ def find_matplot_python_hash():
         #Wir brauchen den hash: 6ewjgugumhth6r56gvjxhdtq6tvowln7
         else:
             py=py[0][py[0].find('python-')+7:py[0].find('/bin')]
-            py_hash=py[py.find('-')+1:]           
-            menutxt+=(shell(sourcen+'spack load python /'+py_hash+';spack load py-pip; python -m pip install matplotlib'))            
+            py_hash=py[py.find('-')+1:]
+            print('installing matplotlib ...')
+            shell(sourcen+'spack load python /'+py_hash+';spack load py-pip; python -m pip install matplotlib')           
             return '/'+py_hash
             
     #Matplotlib ist installiert 
@@ -1047,7 +1046,7 @@ def install_spack(pth):
             cmd_ = ''
         #set -e is supposed to prevent an installment if we're in the wrong place        
         cmd='set -e; {}cd {}; git clone -c feature.manyFiles=true https://github.com/spack/spack.git'.format(cmd_, inst_pth)
-        print(FCOL[15]+'\n<info>    '+FEND+'spack will installed ...\n')
+        print(FCOL[15]+'\n<info>    '+FEND+'installing spack ...\n')
         shell(cmd)
         SPACK_XPTH=pth 
         file_w(BENCH_PTHS[MISC_ID]+'config.txt',SPACK_XPTH+'        [Path to the spack-binary]',4)
@@ -2030,9 +2029,9 @@ def show_highlights(func='max', res_id='', bench_tag='all', count=float('inf'),s
         _=read_values(res_id,bench_tag)
         if len(_[0])==0:
             if res_id !='' and bench_tag!='all' and bench_tag!='':
-                return '\n'+FCOL[15]+'<info>'+FEND+ml+'no results found in {}_res@{}'.format(bench_tag,res_id)
+                return '\n'+FCOL[6]+'<info>'+FEND+ml+'no results found in {}_res@{}'.format(bench_tag,res_id)
             else:
-                return '\n'+FCOL[15]+'<info>'+FEND+ml+'no completed benchmarks found' 
+                return '\n'+FCOL[6]+'<info>'+FEND+ml+'no completed projects found' 
         
         label_pos=2
         
@@ -2044,13 +2043,15 @@ def show_highlights(func='max', res_id='', bench_tag='all', count=float('inf'),s
         max_len_var=max([len(str(int(max(i[0][2])))) for i in _[1]])+decimal+1
         if _[0][2]=='':
                 label_pos=1        
-       
+        values_sort=[[],[],[]]
         if func=='max': 
-            values=[[str('{:{}.{}f}'.format(max(i[0][1]),max_len,decimal))+' ['+_[0][label_pos]+']','{:{}.{}f}'.format(i[0][2][i[0][1].index(max(i[0][1]))],max_len_var,decimal)+' (σ²)',i[0][3][1:i[0][3].find(']')+1].replace(')','')] for i in _[1]]
-        
+            values=[[str('{:{}.{}f}'.format(max(i[0][1]),max_len,decimal))+' ['+_[0][label_pos]+']','{:{}.{}f}'.format(i[0][2][i[0][1].index(max(i[0][1]))],max_len_var,decimal)+' (σ²)',i[0][3][1:i[0][3].find(']')+1].replace(')','')] for i in _[1]]            
+            values=sorted(values, key=lambda x:float(x[0][:max_len+1]),reverse=True)
+
         elif func=='min':
             values=[[str('{:{}.{}f}'.format(min(i[0][1]),max_len,decimal))+' ['+_[0][label_pos]+']','{:{}.{}f}'.format(i[0][2][i[0][1].index(max(i[0][1]))],max_len_var,decimal)+' (σ²)',i[0][3][1:i[0][3].find(']')+1].replace(')','')] for i in _[1]]
-                            
+            values=sorted(values, key=lambda x:float(x[0][:max_len+1]))
+        
         #max number of viewable results (all)
         if float(count) > len(values):
             count=len(values)       
@@ -2072,7 +2073,7 @@ def print_finished_results(res_list,txt_=''):
     if len(res_list)<1:
         return ''
     else:
-        txt='\n'+FCOL[15]+'<info>'+FEND+ml+'some benchmarks are finished: which result do you wish to inspect?'
+        txt='\n'+FCOL[15]+'<info>'+FEND+ml+'some projects have been completed: which result(s) do you wish to inspect?'
         txt+='\n      '+ml+FCOL[0]+'results are sorted by their complition time (newest projects first)\n\n'+FEND
         txt+='      {}(0){} cancel'.format(ml+ml,mr)   
         for res in res_list:        
@@ -2163,11 +2164,11 @@ def print_view_res_options(func, bench_tag, count, search_mode,txt_=''):
     txt_0='{}(0){} cancel\n'.format(ml+ml+ml,mr)
     txt_1='{}(1){} continue\n'.format(ml+ml+ml,mr)
     txt_2='{}(2){} aggregation-function ({})\n'.format(ml+ml+ml,mr,func)    
-    txt_3='{}(3){} number of shown highlights ({})\n'.format(ml+ml+ml,mr,count)
-    txt_4='{}(4){} benchmark ({})'.format(ml+ml+ml,mr,bench_tag)
-    txt_5=FCOL[0]+' (only searches for specific benchmark)\n'+FEND    
+    txt_3='{}(3){} number of highlights shown ({})\n'.format(ml+ml+ml,mr,count)
+    txt_4='{}(4){} benchmark specification ({})'.format(ml+ml+ml,mr,bench_tag)
+    txt_5=FCOL[0]+' (searches only for specific benchmark)\n'+FEND    
     txt_6='{}(5){} search mode ({})'.format(ml+ml+ml,mr,search_mode)
-    txt_7=FCOL[0]+' (new: only looks for unviewed results)\n'+FEND 
+    txt_7=FCOL[0]+' (new: looks only for unseen results)\n'+FEND 
     
     print(txt+txt_0+txt_1+txt_2+txt_3+txt_4+txt_5+txt_6+txt_7+'\n'+txt_)
 
@@ -2187,8 +2188,8 @@ def print_menu(txt = ''):
     print(FBGR[11]+FORM[0]+'{:^{pos}}'.format('Main Menu', pos=t_width))
     print(FEND+ml+'(0)'+mr+' Exit')
     print(ml+'(1)'+mr+' Options')
-    print(ml+'(2)'+mr+' Info')
-    print(ml+'(3)'+mr+' View finished runs')
+    print(ml+'(2)'+mr+' Info (Enviroment)')
+    print(ml+'(3)'+mr+' Info (Projects)')
     if (refresh_intervall!=0 and ((time.time()-print_menu.updatetime)>refresh_intervall or print_menu.updatetime==0)) or get_info:
         opt_lines=''
         try:         

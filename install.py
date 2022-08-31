@@ -35,8 +35,7 @@ def check_spec(name,version=-1):
 def check_expr(expr,name):
     try:
         global menutxt   
-        check_syn=check_expr_syn(expr,name)
-        print(expr)
+        check_syn=check_expr_syn(expr,name)        
         if check_syn=='True':
             arr = expr.split('^')       
             
@@ -82,31 +81,7 @@ def install_spec(expr):
         global menutxt
         global slurm
         specs=''
-        """
-        partition=meta[0]
-        node=meta[1]
-        task=meta[2]
-        cpus=meta[3]
-        
-        #Check ob angegebene Partition existiert
-        if shell('sinfo -h -p '+partition).find(partition)==-1:        
-            error_log('partition doesn\'t {} exist!'.format(str(partition)))
-            #os.system('echo Partition: {} existiert nicht >> {}/install.err'.format(str(partition),LOC),locals())
-            return 
-            
-        #slurm=meta
-          
-        
-        #Slurmparameter für die Installation
-        slurm='#!/bin/bash\n' \
-        +'#SBATCH --nodes='+node+'\n' \
-        +'#SBATCH --ntasks='+task+'\n' \
-        +'#SBATCH --cpus-per-task='+cpus+'\n' \
-        +'#SBATCH --partition='+partition+'\n' \
-        +'#SBATCH --output={}/install.out\n'.format(LOC) \
-        +'#SBATCH --error={}/install.err\n\n'.format(LOC) \
-        +'source {}/share/spack/setup-env.sh\n'.format(meta[4])
-        """
+
         for e in expr:
             #Prüft ob identische spec installiert werden soll
             if specs.find(e[0])==-1:            

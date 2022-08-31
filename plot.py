@@ -12,15 +12,15 @@ try:
 except ImportError:
         pass
 
-#############  hints regarding data structure  ##############
-#                                                           #
-#  values =[[metadata][results]]                            #  
-#  [metadata] = [[titel][x-label][y-label]]                 #
-#  [results]  = [[profile_1],[profile_2],...,[profile_n]]   #
-#  [profile_x] = [[aggregated values],[iterations]]         #
-#  [profile_result] = [[x1,...,xn],[y1,...,yn],...,label]   #
-#                                                           #
-#############################################################
+#################  hints regarding data structure  #################
+#                                                                  #
+#   values =[[metadata][results]]                                  #  
+#   [metadata] = [[titel][x-label][y-label]]                       #
+#   [results]  = [[profile_1],[profile_2],...,[profile_n]]         #
+#   [profile_x] = [[aggregated values],[iterations]]               #
+#   [profile_result] = [[x1,...,xn],[y1,...,yn],[variance],label]  #
+#                                                                  #
+####################################################################
 
 
 #plot.py Path
@@ -48,8 +48,7 @@ def read_values(TIMESTEMP,BENCH):
                 values[0]=['HPL Benchmark','Gflops','']  
                 
             read_hpl(name,profiles.index(name),BENCH,TIMESTEMP)
-            
-        
+                    
         elif BENCH=='hpcg':
             #meta-labels
             if label_token==True:
@@ -57,8 +56,7 @@ def read_values(TIMESTEMP,BENCH):
             read_hpcg(name,profiles.index(name),BENCH,TIMESTEMP)    
 
         #reads aggregation-type
-        aggregate_func=read_aggregate_func(name[1:-1],BENCH)           
-        
+        aggregate_func=read_aggregate_func(name[1:-1],BENCH)        
                 
         if append_count>0:
             #aggregates data across all iterations
@@ -243,13 +241,6 @@ def aggregate_results(list, func):
 def calc_variance(list):
     return np.var(list,axis=0).tolist()
 
-#Min-Max-Normalisierung
-def normalize_values(list):   
-    min_=0
-    max_=0
-    max_=max(list)
-    min_=min(list)    
-    return [(i-min_)/(max_-min_) for i in list]
 
 def read_slurm_param(name,TIMESTEMP):
     nodes='nA'

@@ -9,7 +9,7 @@ mpich						[MPI Implementierung]
 4.0.2						[MPI Version]
 gcc							[MPI Compiler]
 12.1.0						[MPI Version]
--------------------SLURM parameter-------------------
+-------------------SLURM parameters-------------------
 vl-parcio					[Partition]
 2							[Nodes]
 1							[Prozesse]
