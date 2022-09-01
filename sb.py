@@ -2349,13 +2349,19 @@ def options_menu():
             txt+='\n\n'+ml+FBGR[0]+'possible choices:'+FEND+'\n'+ml
             left_size=t_width-len(ml)
             for id in BENCH_ID_LIST:
+                if id == 0:
+                    continue
                 if left_size<len(str(id)+' ('+tag_id_switcher(id)+')'+mr):
                     left_size-=len(ml)
                     txt+='\n'+ml
                 txt+=FORM[0]+str(id)+' ('+tag_id_switcher(id)+')'+FEND+mr
                 left_size-=len(str(id)+' ('+tag_id_switcher(id)+')'+mr)
             print_options_menu(txt)
-            print_options_menu(config_out(int(input_format())))
+            _=input_format()
+            if int(_) in BENCH_ID_LIST and int(_) !=0:
+                print_options_menu(config_out(int(_)))
+            else:
+                print_options_menu(FORM[1]+FCOL[9]+'invalid input'+FEND+': to select option »(n) ...« use the corresponding integer »input:n« ')
         elif opt == '5' or opt == 'form-factor':
             print_options_menu('...current form-factor: {}\n...please insert the new value'.format(form_factor_menu))
             form_factor_menu = int(input_format())
@@ -2487,20 +2493,20 @@ def osu_menu():
             if spack_problem!='':
                 txt+='\n\n'+ml+FCOL[6]+'<warning> '+FEND+'no availability information!\n'+ml+'          reason: {}\n'.format(spack_problem)+'          '+ml+FCOL[6]+SPACK_XPTH+FEND
             print_osu_menu(txt)
-            expr=input_format().split()         
+            expr=input_format().split()            
             if len(expr)<2:
-                txt+='invalid input, possible reason: unspecified test-type e.g. latency'                
+                txt+='\n\n{}invalid input{}: possible reason: unspecified test-type e.g. latency'.format(FCOL[9],FEND)
                 print_osu_menu(txt)
+                continue
 
             if expr=='cancel':
                 clear()
-                return 0
-            print(expr[0].replace(' ',''))
+                return 0           
             scr_pth = bench_run(OSU_ID, expr[0].replace(' ',''),expr[1])           
             menutxt+='\n'+FCOL[4]+shell('sbatch {}'.format(scr_pth))+FEND
             print_osu_menu('')
         elif opt == '2' or opt == 'view':
-            print_osu_menu(view_installed_specs(tag_id_switcher(OSU_ID)))
+            print_osu_menu(view_installed_specs('osu-micro-benchmarks'))
         elif opt == '3'or opt == 'install':           
             txt='\n'+ml+FCOL[13]+FORM[0]+'which profiles do you wish to install?\n\n'+FEND
             txt+=ml+FCOL[0]+FORM[0]+'how to reference profiles: \n'+FEND+FCOL[0]+ml+'osu_cfg_test.txt \t\t\t<=> \ttest \n'+ml+'osu_cfg_1.txt,...,osu_cfg_5.txt \t<=> \t1-5 \n\n'+ml+'e.g. valid input: »1-3,test,9«\n'+ml+FORM[0]+'     abort: »cancel«\n\n'+FEND
